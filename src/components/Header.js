@@ -64,13 +64,13 @@ export default function Header() {
             </div>
 
             {/* Notification Bell */}
-            <Link href="/teacher/notifications" className="relative p-2 text-gray-600 hover:text-primary transition-colors">
+            <Link href="/notifications" className="relative p-2 text-gray-600 hover:text-primary transition-colors">
               <Bell size={24} />
               <span className="absolute top-1 right-1 w-2 h-2 bg-status-red rounded-full"></span>
             </Link>
 
             {/* Profile */}
-            <Link href="/teacher/settings" className="p-2 text-gray-600 hover:text-primary transition-colors">
+            <Link href="/settings" className="p-2 text-gray-600 hover:text-primary transition-colors">
               <Settings size={24} />
             </Link>
           </div>
