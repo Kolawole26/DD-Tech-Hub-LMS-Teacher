@@ -8,6 +8,9 @@
 		},
 		{
 			"path": "../../.."
+		},
+		{
+			"path": "../../../../dd-tech-hub-admin"
 		}
 	],
 	"settings": {}
