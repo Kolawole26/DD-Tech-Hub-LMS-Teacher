@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { usePathname } from 'next/navigation';
 import Image from "next/image";
 
@@ -23,30 +24,93 @@ import {
   ClipboardCheck,
   GraduationCap,
   Presentation,
+  ChevronDown,
+  ChevronRight,
+  FolderKanban,
 } from 'lucide-react';
 
 export default function TeacherSidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [openDropdowns, setOpenDropdowns] = useState({
+    teachingTools: false,
+    assessment: false,
+  });
   const pathname = usePathname();
+  const router = useRouter();
 
-  const menuItems = [
+  const toggleDropdown = (dropdown) => {
+    setOpenDropdowns(prev => ({
+      ...prev,
+      [dropdown]: !prev[dropdown]
+    }));
+  };
+
+  const handleLogoutClick = (e) => {
+    e.preventDefault();
+    setShowLogoutConfirm(true);
+  };
+
+  const confirmLogout = () => {
+    setShowLogoutConfirm(false);
+    // Here you can add your actual logout logic (clear tokens, etc.)
+    router.push('/login');
+  };
+
+  const cancelLogout = () => {
+    setShowLogoutConfirm(false);
+  };
+
+  const teachingToolsItems = [
     { id: 'dashboard', label: 'Teacher Dashboard', icon: Home, href: '/' },
     { id: 'lectures', label: 'Lecture Management', icon: Presentation, href: '/lectures' },
     { id: 'attendance', label: 'Attendance & Roster', icon: ClipboardCheck, href: '/attendance' },
-    { id: 'grading', label: 'Assessment Grading', icon: FileText, href: '/grading' },
-    // { id: 'discussions', label: 'Discussion Groups', icon: MessageSquare, href: '/discussions' },
-    // { id: 'courses', label: 'My Courses', icon: BookOpen, href: '/courses' },
   ];
 
-  const secondaryItems = [
-    // { id: 'calendar', label: 'Schedule Calendar', icon: Calendar, href: '/calendar' },
-    // { id: 'analytics', label: 'Performance Analytics', icon: BarChart3, href: '/analytics' },
+  const assessmentItems = [
+    { id: 'grading', label: 'Assessment Grading', icon: FileText, href: '/grading' },
+    { id: 'exam', label: 'Exam Management', icon: FolderKanban, href: '/exam' },
+    { id: 'assignments', label: 'Assignment Review', icon: BookOpen, href: '/assignments' },
+  ];
+
+  const directLinks = [
     { id: 'notifications', label: 'Notifications', icon: Bell, href: '/notifications' },
     { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
   ];
 
   return (
     <>
+      {/* Logout Confirmation Modal */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full">
+              <LogOut className="h-6 w-6 text-red-600" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
+              Confirm Logout
+            </h3>
+            <p className="text-gray-600 text-center mb-6">
+              Are you sure you want to log out? You will need to sign in again to access your account.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={cancelLogout}
+                className="flex-1 py-2.5 px-4 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmLogout}
+                className="flex-1 py-2.5 px-4 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Mobile overlay */}
       {!isCollapsed && (
         <div 
@@ -75,95 +139,122 @@ export default function TeacherSidebar() {
 
         {/* Logo & Title - Fixed height section */}
         <div className="p-4 border-b border-primary-light flex-shrink-0">
-          <div className=" mb-2 bg-white rounded-md w-fit  mx-auto">
-            <Image src="/assets/images/ddTechLogo.png" alt="logo" width="50" height="50" className=" w-[80px] p-0" />
+          <div className="mb-2 bg-white rounded-md w-fit mx-auto">
+            <Image src="/assets/images/ddTechLogo.png" alt="logo" width="50" height="50" className="w-[80px] p-0" />
           </div>
-          {/* <div className="mt-2">
-            <div className="flex justify-between items-center text-sm">
-              <span>Teacher Portal</span>
-              <span className="bg-status-green text-white px-2 py-1 rounded-full">
-                Active
-              </span>
-            </div>
-          </div> */}
         </div>
 
         {/* Main Navigation - Scrollable section */}
         <nav className="flex-1 overflow-y-auto py-4 px-4 space-y-2">
-          <h2 className="text-sm font-semibold text-primary-light uppercase tracking-wider px-4 py-2">
-            TEACHING TOOLS
-          </h2>
-          
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.id}
-                href={item.href}
-                className={`
-                  w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors border border-primary-lighter shadow-sm
-                  ${isActive 
-                    ? 'bg-primary-lighter border border-primary-light text-primary-dark' 
-                    : 'text-white hover:text-primary-dark hover:bg-primary-lighter'
-                  }
-                `}
-              >
-                <Icon size={20} />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
+          {/* Teaching Tools Dropdown */}
+          <div className="mb-4">
+            <button
+              onClick={() => toggleDropdown('teachingTools')}
+              className="w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors border border-primary-lighter text-white hover:text-primary-dark hover:bg-primary-lighter"
+            >
+              <div className="flex items-center space-x-3">
+                <Presentation size={20} />
+                <span className="font-medium">Teaching Tools</span>
+              </div>
+              {openDropdowns.teachingTools ? (
+                <ChevronDown size={16} />
+              ) : (
+                <ChevronRight size={16} />
+              )}
+            </button>
+            
+            {openDropdowns.teachingTools && (
+              <div className="ml-8 mt-2 space-y-1">
+                {teachingToolsItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = pathname === item.href;
+                  return (
+                    <Link
+                      key={item.id}
+                      href={item.href}
+                      className={`
+                        flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-colors text-sm
+                        ${isActive 
+                          ? 'bg-primary-lighter border border-primary-light text-primary-dark' 
+                          : 'text-primary-light hover:text-white hover:bg-primary-lighter/50'
+                        }
+                      `}
+                    >
+                      <Icon size={18} />
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
-          <h2 className="text-sm font-semibold text-primary-light uppercase tracking-wider px-4 py-2 mt-6">
-            ADMINISTRATION
-          </h2>
-          
-          {secondaryItems.slice(0, 2).map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.id}
-                href={item.href}
-                className={`
-                  w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors border border-primary-lighter shadow-sm
-                  ${isActive 
-                    ? 'bg-primary-lighter border border-primary-light text-primary-dark' 
-                    : 'text-white hover:text-primary-dark hover:bg-primary-lighter'
-                  }
-                `}
-              >
-                <Icon size={20} />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
+          {/* Assessment Management Dropdown */}
+          <div className="mb-4">
+            <button
+              onClick={() => toggleDropdown('assessment')}
+              className="w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors border border-primary-lighter text-white hover:text-primary-dark hover:bg-primary-lighter"
+            >
+              <div className="flex items-center space-x-3">
+                <FileText size={20} />
+                <span className="font-medium">Assessment Management</span>
+              </div>
+              {openDropdowns.assessment ? (
+                <ChevronDown size={16} />
+              ) : (
+                <ChevronRight size={16} />
+              )}
+            </button>
+            
+            {openDropdowns.assessment && (
+              <div className="ml-8 mt-2 space-y-1">
+                {assessmentItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = pathname === item.href;
+                  return (
+                    <Link
+                      key={item.id}
+                      href={item.href}
+                      className={`
+                        flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-colors text-sm
+                        ${isActive 
+                          ? 'bg-primary-lighter border border-primary-light text-primary-dark' 
+                          : 'text-primary-light hover:text-white hover:bg-primary-lighter/50'
+                        }
+                      `}
+                    >
+                      <Icon size={18} />
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
-          {/* <h2 className="text-sm font-semibold text-primary-light uppercase tracking-wider px-4 py-2 mt-6">
-            ACCOUNT
-          </h2>
-          
-          {secondaryItems.slice(2).map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.id}
-                href={item.href}
-                className={`
-                  w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors
-                  ${isActive 
-                    ? 'bg-primary-lighter border border-primary-light text-primary-dark' 
-                    : 'text-white hover:text-primary-dark hover:bg-primary-lighter'
-                  }
-                `}
-              >
-                <Icon size={20} />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })} */}
+          {/* Direct Links - Added gap between buttons */}
+          <div className="mt-6 pt-4 border-t border-primary-light/30 space-y-3">
+            {directLinks.map((item) => {
+              const Icon = item.icon;
+              const isActive = pathname === item.href;
+              return (
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  className={`
+                    w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors border border-primary-lighter block
+                    ${isActive 
+                      ? 'bg-primary-lighter border border-primary-light text-primary-dark' 
+                      : 'text-white hover:text-primary-dark hover:bg-primary-lighter'
+                    }
+                  `}
+                >
+                  <Icon size={20} />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
         </nav>
 
         {/* Profile & Logout Section - Fixed bottom section */}
@@ -178,13 +269,16 @@ export default function TeacherSidebar() {
             </div>
           </div>
           
-          {/* <Link 
-            href="/"
-            className="w-full flex items-center space-x-3 px-4 py-3 text-primary-dark hover:text-primary-darker hover:bg-primary-light rounded-lg transition-colors"
+          {/* Logout Button */}
+          <button
+            onClick={handleLogoutClick}
+            className={`
+              w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors border border-primary-lighter text-white hover:text-primary-dark hover:bg-primary-lighter
+            `}
           >
             <LogOut size={20} />
             <span>Logout</span>
-          </Link> */}
+          </button>
         </div>
       </aside>
     </>
