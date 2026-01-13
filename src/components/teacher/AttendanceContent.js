@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { 
   Users, 
   CheckCircle, 
@@ -23,7 +22,11 @@ import {
   Check,
   X,
   Plus,
-  BookOpen
+  BookOpen,
+  Save,
+  Send,
+  CheckSquare,
+  FileCheck
 } from 'lucide-react';
 
 export default function AttendanceContent() {
@@ -34,6 +37,10 @@ export default function AttendanceContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [selectedClass, setSelectedClass] = useState(null);
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [draftSaved, setDraftSaved] = useState(false);
+  const [draftId, setDraftId] = useState(null);
 
   const courses = [
     { id: 'cs101', name: 'Web App Development', students: 45 },
@@ -69,10 +76,30 @@ export default function AttendanceContent() {
       }
       
       setAttendanceData(students);
+      // Check for existing draft
+      checkForSavedDraft();
     };
 
     generateAttendanceData();
   }, [selectedCourse]);
+
+  const checkForSavedDraft = () => {
+    const savedDraft = localStorage.getItem(`attendance_draft_${selectedCourse}`);
+    if (savedDraft) {
+      const draft = JSON.parse(savedDraft);
+      setAttendanceData(draft.data);
+      setDraftId(draft.id);
+      setDraftSaved(true);
+    }
+  };
+
+  const showSuccess = (message) => {
+    setSuccessMessage(message);
+    setShowSuccessPopup(true);
+    setTimeout(() => {
+      setShowSuccessPopup(false);
+    }, 3000);
+  };
 
   const handleToggleAttendance = (studentId) => {
     setAttendanceData(prev =>
@@ -96,16 +123,72 @@ export default function AttendanceContent() {
 
   const handleSubmitAttendance = () => {
     setIsSubmitting(true);
+    
+    // Validate attendance data
+    const totalStudents = attendanceData.length;
+    const presentStudents = attendanceData.filter(s => s.present).length;
+    
+    if (presentStudents === 0) {
+      setIsSubmitting(false);
+      setSuccessMessage('⚠️ No students marked as present. Please check attendance.');
+      setShowSuccessPopup(true);
+      setTimeout(() => setShowSuccessPopup(false), 3000);
+      return;
+    }
+
+    // Simulate API call
     setTimeout(() => {
       setIsSubmitting(false);
-      alert('Attendance submitted successfully!');
+      
+      // Remove draft if it exists
+      if (draftId) {
+        localStorage.removeItem(`attendance_draft_${selectedCourse}`);
+        setDraftId(null);
+        setDraftSaved(false);
+      }
+      
+      // Create submission record
+      const submission = {
+        id: Date.now(),
+        course: selectedCourse,
+        date: new Date().toISOString(),
+        attendance: attendanceData.map(s => ({
+          id: s.id,
+          present: s.present,
+          late: s.late,
+          notes: s.notes
+        }))
+      };
+      
+      // Save to localStorage (simulating database)
+      const submissions = JSON.parse(localStorage.getItem('attendance_submissions') || '[]');
+      submissions.push(submission);
+      localStorage.setItem('attendance_submissions', JSON.stringify(submissions));
+      
+      // Show success message
+      showSuccess(`✅ Attendance submitted successfully! ${presentStudents}/${totalStudents} students present.`);
     }, 1500);
+  };
+
+  const handleSaveDraft = () => {
+    const draft = {
+      id: draftId || Date.now(),
+      course: selectedCourse,
+      date: new Date().toISOString(),
+      data: attendanceData
+    };
+    
+    localStorage.setItem(`attendance_draft_${selectedCourse}`, JSON.stringify(draft));
+    setDraftId(draft.id);
+    setDraftSaved(true);
+    
+    showSuccess(`💾 Attendance draft saved! You can continue later.`);
   };
 
   const handleExportData = () => {
     // Export attendance data as CSV
     const csv = [
-      ['Student ID', 'Name', 'Email', 'Status', 'Attendance %', 'Last Session'],
+      ['Student ID', 'Name', 'Email', 'Status', 'Attendance %', 'Last Session', 'Notes'],
       ...attendanceData.map(student => [
         student.studentId,
         student.name,
@@ -113,6 +196,7 @@ export default function AttendanceContent() {
         student.present ? (student.late ? 'Late' : 'Present') : 'Absent',
         `${student.attendance}%`,
         student.lastSession,
+        student.notes || ''
       ])
     ].map(row => row.join(',')).join('\n');
 
@@ -122,9 +206,10 @@ export default function AttendanceContent() {
     a.href = url;
     a.download = `attendance_${selectedCourse}_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
+    
+    showSuccess('📊 Attendance data exported successfully!');
   };
 
-  // New handler functions for previously non-working buttons
   const handleMarkAllPresent = () => {
     setAttendanceData(prev =>
       prev.map(student => ({
@@ -133,12 +218,20 @@ export default function AttendanceContent() {
         late: false
       }))
     );
-    alert('All students marked as present!');
+    showSuccess('✅ All students marked as present!');
   };
 
   const handleImportRoster = () => {
-    alert('Import roster feature would open file picker here');
-    // In a real app, this would trigger file input and process CSV
+    // Simulate file upload
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.csv,.xlsx';
+    fileInput.onchange = (e) => {
+      if (e.target.files[0]) {
+        showSuccess(`📁 Roster imported: ${e.target.files[0].name}`);
+      }
+    };
+    fileInput.click();
   };
 
   const handleDownloadTemplate = () => {
@@ -154,6 +247,8 @@ export default function AttendanceContent() {
     a.href = url;
     a.download = 'attendance_template.csv';
     a.click();
+    
+    showSuccess('📄 Template downloaded successfully!');
   };
 
   const handlePrepareAttendance = (classItem) => {
@@ -161,27 +256,37 @@ export default function AttendanceContent() {
     setShowAttendanceModal(true);
   };
 
-  const handleSaveDraft = () => {
-    alert('Attendance draft saved!');
-  };
-
   const handleAddNote = (studentId) => {
-    const note = prompt('Add note for this student:');
-    if (note) {
+    const student = attendanceData.find(s => s.id === studentId);
+    const note = prompt(`Add note for ${student.name}:`, student.notes || '');
+    if (note !== null) {
       setAttendanceData(prev =>
-        prev.map(student =>
-          student.id === studentId
-            ? { ...student, notes: note }
-            : student
+        prev.map(s =>
+          s.id === studentId
+            ? { ...s, notes: note }
+            : s
         )
       );
+      showSuccess(`📝 Note added for ${student.name}`);
     }
   };
 
   const handleViewDetails = (studentId) => {
     const student = attendanceData.find(s => s.id === studentId);
     if (student) {
-      alert(`Student Details:\n\nName: ${student.name}\nID: ${student.studentId}\nEmail: ${student.email}\nAttendance: ${student.attendance}%\nStatus: ${student.present ? 'Present' : 'Absent'}${student.late ? ' (Late)' : ''}\nLast Session: ${student.lastSession}\nNotes: ${student.notes || 'None'}`);
+      const details = `
+Student Details:
+
+Name: ${student.name}
+ID: ${student.studentId}
+Email: ${student.email}
+Attendance: ${student.attendance}%
+Status: ${student.present ? 'Present' : 'Absent'}${student.late ? ' (Late)' : ''}
+Last Session: ${student.lastSession}
+Notes: ${student.notes || 'None'}
+      `.trim();
+      
+      alert(details);
     }
   };
 
@@ -192,9 +297,29 @@ export default function AttendanceContent() {
 
   const handleSubmitClassAttendance = () => {
     if (selectedClass) {
-      alert(`Attendance prepared for ${selectedClass.course} class at ${selectedClass.time}`);
+      // Save class attendance settings
+      const classAttendance = {
+        class: selectedClass,
+        date: new Date().toISOString(),
+        method: 'manual',
+        notes: '',
+        autoSave: true
+      };
+      
+      localStorage.setItem('class_attendance_settings', JSON.stringify(classAttendance));
+      
+      showSuccess(`🎯 Attendance prepared for ${selectedClass.course} at ${selectedClass.time}`);
     }
     handleCloseModal();
+  };
+
+  const handleClearDraft = () => {
+    if (draftId) {
+      localStorage.removeItem(`attendance_draft_${selectedCourse}`);
+      setDraftId(null);
+      setDraftSaved(false);
+      showSuccess('🗑️ Draft cleared successfully!');
+    }
   };
 
   const filteredStudents = attendanceData.filter(student =>
@@ -213,6 +338,24 @@ export default function AttendanceContent() {
 
   return (
     <div className="space-y-6">
+      {/* Success Popup */}
+      {showSuccessPopup && (
+        <div className="fixed top-4 right-4 z-50 animate-slide-in">
+          <div className="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-4 rounded-lg shadow-lg flex items-center space-x-3">
+            <CheckCircle size={24} />
+            <div>
+              <p className="font-semibold">{successMessage}</p>
+            </div>
+            <button 
+              onClick={() => setShowSuccessPopup(false)}
+              className="ml-4 hover:bg-white/20 p-1 rounded-full"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-gradient-to-r from-primary-dark to-primary-light rounded-2xl p-6 text-white">
         <div className="flex flex-col md:flex-row md:items-center justify-between">
@@ -221,18 +364,18 @@ export default function AttendanceContent() {
             <p className="text-primary-lighter">Track and submit student attendance for all class types</p>
           </div>
           <div className="mt-4 md:mt-0 flex items-center space-x-3">
-            <button
-              onClick={handleSubmitAttendance}
-              disabled={isSubmitting}
-              className="px-6 py-3 bg-white text-green-600 hover:bg-gray-100 font-semibold rounded-lg disabled:opacity-50"
-            >
-              {isSubmitting ? 'Submitting...' : 'Submit Attendance'}
-            </button>
+            {draftSaved && (
+              <div className="flex items-center space-x-2 bg-white/20 px-3 py-2 rounded-lg">
+                <Save size={16} />
+                <span className="text-sm">Draft Saved</span>
+              </div>
+            )}
             <button
               onClick={handleExportData}
-              className="px-6 py-3 border-2 border-white text-white hover:bg-white/10 font-semibold rounded-lg"
+              className="px-6 py-3 border-2 border-white text-white hover:bg-white/10 font-semibold rounded-lg flex items-center space-x-2"
             >
-              Export Data
+              <Download size={20} />
+              <span>Export Data</span>
             </button>
           </div>
         </div>
@@ -309,21 +452,21 @@ export default function AttendanceContent() {
           <div className="space-y-3">
             <button 
               onClick={handleMarkAllPresent}
-              className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center space-x-2"
+              className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center justify-center space-x-2 transition-colors"
             >
-              <CheckCircle size={16} />
+              <CheckSquare size={16} />
               <span>Mark All Present</span>
             </button>
             <button 
               onClick={handleImportRoster}
-              className="w-full px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg flex items-center space-x-2"
+              className="w-full px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg flex items-center justify-center space-x-2 transition-colors"
             >
               <Upload size={16} />
               <span>Import Roster</span>
             </button>
             <button 
               onClick={handleDownloadTemplate}
-              className="w-full px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg flex items-center space-x-2"
+              className="w-full px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg flex items-center justify-center space-x-2 transition-colors"
             >
               <Download size={16} />
               <span>Download Template</span>
@@ -342,7 +485,7 @@ export default function AttendanceContent() {
               <select
                 value={selectedCourse}
                 onChange={(e) => setSelectedCourse(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg"
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-light focus:border-transparent"
               >
                 {courses.map((course) => (
                   <option key={course.id} value={course.id}>
@@ -355,7 +498,7 @@ export default function AttendanceContent() {
             <select
               value={selectedSession}
               onChange={(e) => setSelectedSession(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg"
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-light focus:border-transparent"
             >
               {sessions.map((session) => (
                 <option key={session.id} value={session.id}>
@@ -371,11 +514,32 @@ export default function AttendanceContent() {
               placeholder="Search students..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-full md:w-64"
+              className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-full md:w-64 focus:ring-2 focus:ring-primary-light focus:border-transparent"
             />
             <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
           </div>
         </div>
+
+        {/* Draft Status */}
+        {draftSaved && (
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <Save className="text-blue-600" size={20} />
+                <div>
+                  <p className="font-medium text-blue-800">Draft Available</p>
+                  <p className="text-sm text-blue-600">You have an unsaved attendance draft. Submit or clear it.</p>
+                </div>
+              </div>
+              <button
+                onClick={handleClearDraft}
+                className="px-3 py-1 text-sm text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+              >
+                Clear Draft
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Attendance Table */}
         <div className="overflow-x-auto">
@@ -429,20 +593,20 @@ export default function AttendanceContent() {
                     <div className="flex items-center space-x-2">
                       <button
                         onClick={() => handleToggleAttendance(student.id)}
-                        className={`px-3 py-1 rounded-lg text-sm ${
+                        className={`px-3 py-1 rounded-lg text-sm transition-colors ${
                           student.present
-                            ? 'bg-green-100 text-green-800 border border-green-200'
-                            : 'bg-gray-100 text-gray-800 border border-gray-200'
+                            ? 'bg-green-100 text-green-800 border border-green-200 hover:bg-green-200'
+                            : 'bg-gray-100 text-gray-800 border border-gray-200 hover:bg-gray-200'
                         }`}
                       >
                         {student.present ? 'Present' : 'Absent'}
                       </button>
                       <button
                         onClick={() => handleToggleLate(student.id)}
-                        className={`px-3 py-1 rounded-lg text-sm ${
+                        className={`px-3 py-1 rounded-lg text-sm transition-colors ${
                           student.late
-                            ? 'bg-yellow-100 text-yellow-800 border border-yellow-200'
-                            : 'bg-gray-100 text-gray-800 border border-gray-200'
+                            ? 'bg-yellow-100 text-yellow-800 border border-yellow-200 hover:bg-yellow-200'
+                            : 'bg-gray-100 text-gray-800 border border-gray-200 hover:bg-gray-200'
                         }`}
                       >
                         {student.late ? 'Late' : 'On Time'}
@@ -453,14 +617,14 @@ export default function AttendanceContent() {
                     <div className="flex items-center space-x-2">
                       <button 
                         onClick={() => handleAddNote(student.id)}
-                        className="p-1 text-blue-600 hover:text-blue-800"
+                        className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
                         title="Add Note"
                       >
                         <FileText size={16} />
                       </button>
                       <button 
                         onClick={() => handleViewDetails(student.id)}
-                        className="p-1 text-green-600 hover:text-green-800"
+                        className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded"
                         title="View Details"
                       >
                         <AlertCircle size={16} />
@@ -475,22 +639,38 @@ export default function AttendanceContent() {
 
         {/* Bulk Actions */}
         <div className="flex items-center justify-between mt-6 pt-6 border-t">
-          <div className="text-sm text-gray-600">
-            Showing {filteredStudents.length} of {attendanceData.length} students
+          <div className="text-sm text-gray-600 flex items-center space-x-2">
+            <span>Showing {filteredStudents.length} of {attendanceData.length} students</span>
+            {draftSaved && (
+              <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                Draft Saved
+              </span>
+            )}
           </div>
           <div className="flex space-x-3">
             <button 
               onClick={handleSaveDraft}
-              className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg"
+              className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg flex items-center space-x-2 transition-colors"
             >
-              Save Draft
+              <Save size={16} />
+              <span>Save Draft</span>
             </button>
             <button
               onClick={handleSubmitAttendance}
               disabled={isSubmitting}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg disabled:opacity-50"
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg disabled:opacity-50 flex items-center space-x-2 transition-colors"
             >
-              {isSubmitting ? 'Submitting...' : 'Submit Attendance'}
+              {isSubmitting ? (
+                <>
+                  <Clock size={16} className="animate-spin" />
+                  <span>Submitting...</span>
+                </>
+              ) : (
+                <>
+                  <Send size={16} />
+                  <span>Submit Attendance</span>
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -502,8 +682,10 @@ export default function AttendanceContent() {
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-gray-800">Attendance History</h2>
             <select 
-              onChange={(e) => alert(`Viewing data for: ${e.target.value}`)}
-              className="px-4 py-2 border border-gray-300 rounded-lg"
+              onChange={(e) => {
+                showSuccess(`Viewing data for: ${e.target.value}`);
+              }}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-light focus:border-transparent"
             >
               <option>Last 7 days</option>
               <option>Last 30 days</option>
@@ -517,7 +699,7 @@ export default function AttendanceContent() {
               { date: 'Dec 10, 2025', present: 40, absent: 5, late: 0, topic: 'CSS Grid' },
               { date: 'Dec 6, 2025', present: 38, absent: 7, late: 3, topic: 'HTML Fundamentals' },
             ].map((record, index) => (
-              <div key={index} className="p-4 border border-gray-200 rounded-lg">
+              <div key={index} className="p-4 border border-gray-200 rounded-lg hover:border-primary-lighter transition-colors">
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <h3 className="font-semibold text-gray-800">{record.date}</h3>
@@ -560,7 +742,6 @@ export default function AttendanceContent() {
             {[
               { time: 'Today, 10:00 AM', course: 'Web App Dev', type: 'Live', description: 'React Hooks and State Management' },
               { time: 'Tomorrow, 2:00 PM', course: 'Advanced JS', type: 'Recorded', description: 'Async/Await and Promises' },
-              { time: 'Wednesday, 11:00 AM', course: 'React Masterclass', type: 'Live', description: 'Component Lifecycle' },
             ].map((classItem, index) => (
               <div key={index} className="p-4 border border-gray-200 rounded-lg hover:border-primary-lighter transition-colors">
                 <div className="flex items-center justify-between mb-2">
@@ -575,9 +756,10 @@ export default function AttendanceContent() {
                 <p className="text-sm text-gray-500 mb-3">{classItem.description}</p>
                 <button 
                   onClick={() => handlePrepareAttendance(classItem)}
-                  className="w-full px-4 py-2 border border-primary-dark text-primary-dark hover:bg-primary-lighter rounded-lg"
+                  className="w-full px-4 py-2 border border-primary-dark text-primary-dark hover:bg-primary-lighter rounded-lg transition-colors flex items-center justify-center space-x-2"
                 >
-                  Prepare Attendance
+                  <FileCheck size={16} />
+                  <span>Prepare Attendance</span>
                 </button>
               </div>
             ))}
@@ -593,7 +775,7 @@ export default function AttendanceContent() {
               <h3 className="text-xl font-bold text-gray-800">Prepare Attendance</h3>
               <button
                 onClick={handleCloseModal}
-                className="p-2 hover:bg-gray-100 rounded-lg"
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <X size={20} />
               </button>
@@ -616,7 +798,7 @@ export default function AttendanceContent() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Attendance Method
                   </label>
-                  <select className="w-full p-3 border border-gray-300 rounded-lg">
+                  <select className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-light focus:border-transparent">
                     <option>Manual Entry</option>
                     <option>QR Code Check-in</option>
                     <option>Auto-detect (for online classes)</option>
@@ -628,7 +810,7 @@ export default function AttendanceContent() {
                     Additional Notes (Optional)
                   </label>
                   <textarea
-                    className="w-full p-3 border border-gray-300 rounded-lg"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-light focus:border-transparent"
                     rows="3"
                     placeholder="Add any notes about this class session..."
                   />
@@ -639,15 +821,16 @@ export default function AttendanceContent() {
             <div className="flex justify-end space-x-3">
               <button
                 onClick={handleCloseModal}
-                className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg"
+                className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSubmitClassAttendance}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg"
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center space-x-2"
               >
-                Start Attendance
+                <FileCheck size={16} />
+                <span>Start Attendance</span>
               </button>
             </div>
           </div>

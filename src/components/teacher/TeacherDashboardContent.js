@@ -130,7 +130,7 @@ export default function TeacherDashboardContent() {
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-800">My Courses</h2>
               <Link 
-                href="/courses" 
+                href="/lectures" 
                 className="text-primary-dark hover:text-primary font-medium flex items-center space-x-1"
               >
                 <span>View All</span>

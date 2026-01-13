@@ -357,7 +357,7 @@ export default function ExamManagementPage() {
             <p className="text-primary-lighter">Create, schedule, and manage all course examinations</p>
           </div>
           <div className="flex flex-wrap gap-3 mt-4 md:mt-0">
-            <button
+            {/* <button
               onClick={handleSendReminders}
               className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg flex items-center space-x-2"
             >
@@ -370,7 +370,7 @@ export default function ExamManagementPage() {
             >
               <CheckCircle size={16} />
               <span>Quick Activate</span>
-            </button>
+            </button> */}
             <button
               onClick={() => setShowCreateModal(true)}
               className="px-6 py-3 bg-white text-gray-800 hover:bg-gray-100 font-semibold rounded-lg flex items-center space-x-2"
