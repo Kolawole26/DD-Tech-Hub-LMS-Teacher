@@ -45,7 +45,12 @@ import {
   EyeOff,
   MicOff,
   Monitor,
-  AlertTriangle
+  AlertTriangle,
+  ExternalLink,
+  Bell,
+  BookOpen,
+  FileDown,
+  MessageCircle
 } from 'lucide-react';
 
 export default function LectureManagementContent() {
@@ -131,7 +136,8 @@ export default function LectureManagementContent() {
       description: 'Deep dive into advanced JavaScript concepts including closures, prototypes, and async/await',
       recording: true,
       materials: ['slides', 'code-examples'],
-      password: 'js2025'
+      password: 'js2025',
+      instructor: 'Dr. Sarah Johnson'
     },
     {
       id: 2,
@@ -145,7 +151,8 @@ export default function LectureManagementContent() {
       description: 'Complete guide to CSS Grid layout with practical examples',
       recording: true,
       materials: ['slides', 'cheatsheet'],
-      password: 'cssgrid'
+      password: 'cssgrid',
+      instructor: 'Prof. Michael Chen'
     },
     {
       id: 3,
@@ -159,7 +166,8 @@ export default function LectureManagementContent() {
       description: 'Exploring different state management patterns in modern React applications',
       recording: true,
       materials: ['slides', 'demo-project'],
-      password: 'react2025'
+      password: 'react2025',
+      instructor: 'Dr. Alex Rodriguez'
     },
   ]);
 
@@ -297,6 +305,10 @@ export default function LectureManagementContent() {
   const [showRecordingModal, setShowRecordingModal] = useState(false);
   const [selectedRecording, setSelectedRecording] = useState(null);
   const [showEditor, setShowEditor] = useState(false);
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [showMaterialsModal, setShowMaterialsModal] = useState(false);
+  const [showReminderModal, setShowReminderModal] = useState(false);
   
   // Recording settings
   const [recordingSettings, setRecordingSettings] = useState({
@@ -314,21 +326,16 @@ export default function LectureManagementContent() {
     autoPublish: false
   });
 
-  // Live session state
-  const [liveStats, setLiveStats] = useState({
-    connected: 45,
-    audio: true,
-    video: true,
-    screenShare: false,
+  // Live session state - UPDATED TO MATCH FIRST CODE STYLE
+  const [liveClassStatus, setLiveClassStatus] = useState({
+    isJoined: false,
     isFullscreen: false,
     isMuted: false,
-    bandwidth: '4.2 Mbps',
-    latency: '45ms',
-    participants: [
-      { id: 1, name: 'John Doe', role: 'student', connected: true },
-      { id: 2, name: 'Jane Smith', role: 'student', connected: true },
-      { id: 3, name: 'Bob Wilson', role: 'student', connected: true },
-    ]
+    participants: 45,
+    audio: true,
+    chat: true,
+    video: true,
+    screenShare: false
   });
 
   // Editor state
@@ -405,35 +412,67 @@ export default function LectureManagementContent() {
     }
   };
 
-  // Live session handlers
+  // Live session handlers - UPDATED TO MATCH FIRST CODE STYLE
   const startLiveSession = () => {
     setIsLive(true);
-    setLiveStats(prev => ({ ...prev, connected: 0 }));
-    alert('Live session started! Students can now join.');
+    setLiveClassStatus(prev => ({ ...prev, participants: 0, isJoined: true }));
+    setShowJoinModal(true);
     
     // Simulate students joining
     const interval = setInterval(() => {
-      setLiveStats(prev => {
-        if (prev.connected >= 45) {
+      setLiveClassStatus(prev => {
+        if (prev.participants >= 45) {
           clearInterval(interval);
           return prev;
         }
         return { 
           ...prev, 
-          connected: prev.connected + 1,
-          participants: [...prev.participants, {
-            id: prev.participants.length + 1,
-            name: `Student ${prev.participants.length + 1}`,
-            role: 'student',
-            connected: true
-          }]
+          participants: prev.participants + 1
         };
       });
     }, 500);
+    
+    alert('Live session started! Students can now join.');
+  };
+
+  const handleJoinClass = () => {
+    setLiveClassStatus(prev => ({ ...prev, isJoined: true }));
+    setShowJoinModal(true);
+  };
+
+  const handleLeaveClass = () => {
+    setLiveClassStatus(prev => ({ ...prev, isJoined: false }));
+    setShowJoinModal(false);
+    setIsLive(false);
+  };
+
+  const handleToggleFullscreen = () => {
+    setLiveClassStatus(prev => ({ ...prev, isFullscreen: !prev.isFullscreen }));
+  };
+
+  const handleToggleMute = () => {
+    setLiveClassStatus(prev => ({ ...prev, isMuted: !prev.isMuted }));
+  };
+
+  const handleToggleAudio = () => {
+    setLiveClassStatus(prev => ({ ...prev, audio: !prev.audio }));
+  };
+
+  const handleToggleChat = () => {
+    setLiveClassStatus(prev => ({ ...prev, chat: !prev.chat }));
+  };
+
+  const handleToggleVideo = () => {
+    setLiveClassStatus(prev => ({ ...prev, video: !prev.video }));
+  };
+
+  const handleToggleScreenShare = () => {
+    setLiveClassStatus(prev => ({ ...prev, screenShare: !prev.screenShare }));
   };
 
   const stopLiveSession = () => {
     setIsLive(false);
+    setLiveClassStatus(prev => ({ ...prev, isJoined: false }));
     
     // Create a new recording from the live session
     const newRecordingId = recordings.length > 0 ? Math.max(...recordings.map(r => r.id)) + 1 : 1;
@@ -472,16 +511,6 @@ export default function LectureManagementContent() {
     
     setRecordings(prev => [newRecording, ...prev]);
     alert('Live session ended and recorded!');
-  };
-
-  const toggleLiveControl = (control) => {
-    setLiveStats(prev => ({
-      ...prev,
-      [control]: !prev[control]
-    }));
-    
-    const action = !liveStats[control] ? 'enabled' : 'disabled';
-    alert(`${control} ${action}`);
   };
 
   // Material handlers
@@ -563,7 +592,8 @@ export default function LectureManagementContent() {
         description: '',
         recording: true,
         materials: [],
-        password: Math.random().toString(36).substr(2, 6)
+        password: Math.random().toString(36).substr(2, 6),
+        instructor: 'You'
       };
       
       setSessions(prev => [newSession, ...prev]);
@@ -598,7 +628,8 @@ export default function LectureManagementContent() {
     const session = sessions.find(s => s.id === sessionId);
     alert(`Starting session: ${session?.title}`);
     setIsLive(true);
-    setLiveStats(prev => ({ ...prev, connected: 0 }));
+    setLiveClassStatus(prev => ({ ...prev, participants: 0, isJoined: true }));
+    setShowJoinModal(true);
   };
 
   const handleCopyLink = (link) => {
@@ -639,6 +670,38 @@ export default function LectureManagementContent() {
         )
       );
       alert('Session rescheduled successfully!');
+    }
+  };
+
+  const handleViewMaterials = () => {
+    setShowMaterialsModal(true);
+  };
+
+  const handleWatchRecording = (recording) => {
+    setSelectedRecording(recording);
+    setShowRecordingModal(true);
+  };
+
+  const handlePreviewRecording = (recording) => {
+    setSelectedRecording(recording);
+    setShowPreviewModal(true);
+  };
+
+  const handleSetReminder = (session) => {
+    setSelectedRecording(session);
+    setShowReminderModal(true);
+  };
+
+  const handleShareRecording = (recording) => {
+    if (navigator.share) {
+      navigator.share({
+        title: recording.title,
+        text: `Check out this class recording: ${recording.title}`,
+        url: window.location.href,
+      });
+    } else {
+      navigator.clipboard.writeText(window.location.href);
+      console.log('Link copied to clipboard');
     }
   };
 
@@ -817,14 +880,6 @@ export default function LectureManagementContent() {
     }));
   };
 
-  const toggleFullscreen = () => {
-    setLiveStats(prev => ({
-      ...prev,
-      isFullscreen: !prev.isFullscreen
-    }));
-    alert(liveStats.isFullscreen ? 'Exited fullscreen' : 'Entered fullscreen');
-  };
-
   // Utility functions
   const toggleFavoriteMaterial = (materialId) => {
     setMaterials(prev =>
@@ -924,7 +979,7 @@ export default function LectureManagementContent() {
                 {/* Timeline */}
                 <div className="relative h-2 bg-gray-700 rounded-full cursor-pointer">
                   <div
-                    className="absolute h-full bg-blue-500 rounded-full"
+                    className="absolute h-full bg-primary-dark rounded-full"
                     style={{ width: `${(currentTime / duration) * 100}%` }}
                   />
                   <input
@@ -963,7 +1018,7 @@ export default function LectureManagementContent() {
                 <button
                   onClick={() => setEditingMode('trim')}
                   className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${
-                    editingMode === 'trim' ? 'bg-blue-100 text-primary-light border border-blue-200' : 'bg-white text-gray-700 border border-gray-200'
+                    editingMode === 'trim' ? 'bg-blue-100 text-primary-dark border border-blue-200' : 'bg-white text-gray-700 border border-gray-200'
                   }`}
                 >
                   <Scissors size={16} />
@@ -972,7 +1027,7 @@ export default function LectureManagementContent() {
                 <button
                   onClick={() => setEditingMode('caption')}
                   className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${
-                    editingMode === 'caption' ? 'bg-blue-100 text-primary-light border border-blue-200' : 'bg-white text-gray-700 border border-gray-200'
+                    editingMode === 'caption' ? 'bg-blue-100 text-primary-dark border border-blue-200' : 'bg-white text-gray-700 border border-gray-200'
                   }`}
                 >
                   <MessageSquare size={16} />
@@ -981,7 +1036,7 @@ export default function LectureManagementContent() {
                 <button
                   onClick={() => setEditingMode('chapters')}
                   className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${
-                    editingMode === 'chapters' ? 'bg-blue-100 text-primary-light border border-blue-200' : 'bg-white text-gray-700 border border-gray-200'
+                    editingMode === 'chapters' ? 'bg-blue-100 text-primary-dark border border-blue-200' : 'bg-white text-gray-700 border border-gray-200'
                   }`}
                 >
                   <FileText size={16} />
@@ -1167,7 +1222,7 @@ export default function LectureManagementContent() {
         <div className="flex flex-col md:flex-row md:items-center justify-between">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold mb-2">Lecture Management</h1>
-            <p className="text-blue-100">Upload materials, conduct live sessions, and manage recordings</p>
+            <p className="text-primary-lighter">Upload materials, conduct live sessions, and manage recordings</p>
           </div>
           <div className="mt-4 md:mt-0 flex items-center space-x-3">
             <button
@@ -1189,8 +1244,119 @@ export default function LectureManagementContent() {
         </div>
       </div>
 
-      {/* Live Session Controls */}
+      {/* Live Class Now Section - UPDATED TO MATCH FIRST CODE STYLE */}
       {isLive && (
+        <div className="bg-white rounded-2xl shadow-sm p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-gray-800">Live Class Now</h2>
+            <div className="flex items-center space-x-2 text-red-600">
+              <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></div>
+              <span className="font-semibold">LIVE NOW</span>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Video Player */}
+            <div className="bg-gray-900 rounded-xl overflow-hidden">
+              <div className="aspect-video bg-black flex items-center justify-center relative">
+                {!liveClassStatus.isJoined ? (
+                  <div className="text-center">
+                    <div className="w-16 h-16 mx-auto mb-4 bg-red-600 rounded-full flex items-center justify-center animate-pulse">
+                      <Play className="text-white" size={32} />
+                    </div>
+                    <p className="text-white font-semibold">Live Class in Progress</p>
+                    <p className="text-gray-400 text-sm mt-1">Advanced JavaScript Concepts</p>
+                  </div>
+                ) : (
+                  <div className="w-full h-full flex flex-col">
+                    {/* Video controls */}
+                    <div className="absolute top-4 right-4 flex space-x-2">
+                      <button 
+                        onClick={handleToggleFullscreen}
+                        className="p-2 bg-black/50 text-white rounded-lg hover:bg-black/70"
+                      >
+                        {liveClassStatus.isFullscreen ? <Maximize2 size={20} /> : <Maximize2 size={20} />}
+                      </button>
+                      <button 
+                        onClick={handleToggleMute}
+                        className="p-2 bg-black/50 text-white rounded-lg hover:bg-black/70"
+                      >
+                        {liveClassStatus.isMuted ? <Volume2 size={20} /> : <Volume2 size={20} />}
+                      </button>
+                    </div>
+                    
+                    {/* Simulated video content */}
+                    <div className="flex-1 flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="w-16 h-16 mx-auto mb-4 bg-red-600 rounded-full flex items-center justify-center">
+                          <Play className="text-white" size={32} />
+                        </div>
+                        <p className="text-white font-semibold">Connected to Live Class</p>
+                        <p className="text-gray-400 text-sm mt-1">{liveClassStatus.participants} participants</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="p-4 bg-gray-800">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-white font-semibold">Advanced JavaScript Concepts</h3>
+                    <p className="text-gray-400 text-sm">Dr. Sarah Johnson</p>
+                  </div>
+                  <button 
+                    onClick={handleLeaveClass}
+                    className="bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-2 rounded-lg flex items-center space-x-2"
+                  >
+                    <Play size={20} />
+                    <span>Leave Class</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Class Details */}
+            <div className="space-y-4">
+              <div className="p-4 border border-gray-200 rounded-lg">
+                <div className="flex items-center space-x-3 mb-3">
+                  <Calendar className="text-primary-dark" size={24} />
+                  <div>
+                    <h3 className="font-semibold">Class Schedule</h3>
+                    <p className="text-sm text-gray-600">Monday, December 13 • 10:00 AM</p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <Clock className="text-green-600" size={24} />
+                  <div>
+                    <h3 className="font-semibold">Duration</h3>
+                    <p className="text-sm text-gray-600">2 hours</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 border border-gray-200 rounded-lg">
+                <div className="flex items-center space-x-3 mb-3">
+                  <Users className="text-purple-600" size={24} />
+                  <div>
+                    <h3 className="font-semibold">Participants</h3>
+                    <p className="text-sm text-gray-600">{liveClassStatus.participants} students online</p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <Mic className="text-orange-600" size={24} />
+                  <div>
+                    <h3 className="font-semibold">Audio Setup</h3>
+                    <p className="text-sm text-gray-600">Microphone & speakers ready</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Live Session Controls */}
+      {/* {isLive && (
         <div className="bg-gradient-to-r from-red-600 to-orange-600 rounded-2xl p-6 text-white">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-3">
@@ -1199,7 +1365,7 @@ export default function LectureManagementContent() {
             </div>
             <div className="flex items-center space-x-2">
               <span className="bg-white/20 px-3 py-1 rounded-full text-sm">
-                {liveStats.connected} Students Connected
+                {liveClassStatus.participants} Students Connected
               </span>
               <button
                 onClick={stopLiveSession}
@@ -1213,55 +1379,55 @@ export default function LectureManagementContent() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="flex items-center space-x-3">
               <button 
-                onClick={() => toggleLiveControl('audio')}
-                className={`p-2 rounded-full ${liveStats.audio ? 'bg-white/20' : 'bg-red-800'}`}
+                onClick={handleToggleAudio}
+                className={`p-2 rounded-full ${liveClassStatus.audio ? 'bg-white/20' : 'bg-red-800'}`}
               >
-                {liveStats.audio ? <Mic size={20} /> : <MicOff size={20} />}
+                {liveClassStatus.audio ? <Mic size={20} /> : <MicOff size={20} />}
               </button>
               <div>
                 <p className="text-sm opacity-90">Microphone</p>
-                <span className="font-semibold">{liveStats.audio ? 'Connected' : 'Muted'}</span>
+                <span className="font-semibold">{liveClassStatus.audio ? 'Connected' : 'Muted'}</span>
               </div>
             </div>
             <div className="flex items-center space-x-3">
               <button 
-                onClick={() => toggleLiveControl('video')}
-                className={`p-2 rounded-full ${liveStats.video ? 'bg-white/20' : 'bg-red-800'}`}
+                onClick={handleToggleVideo}
+                className={`p-2 rounded-full ${liveClassStatus.video ? 'bg-white/20' : 'bg-red-800'}`}
               >
-                {liveStats.video ? <Camera size={20} /> : <EyeOff size={20} />}
+                {liveClassStatus.video ? <Camera size={20} /> : <EyeOff size={20} />}
               </button>
               <div>
                 <p className="text-sm opacity-90">Camera</p>
-                <span className="font-semibold">{liveStats.video ? 'Active' : 'Off'}</span>
+                <span className="font-semibold">{liveClassStatus.video ? 'Active' : 'Off'}</span>
               </div>
             </div>
             <div className="flex items-center space-x-3">
               <button 
-                onClick={() => toggleLiveControl('screenShare')}
-                className={`p-2 rounded-full ${liveStats.screenShare ? 'bg-white/20' : 'bg-red-800'}`}
+                onClick={handleToggleScreenShare}
+                className={`p-2 rounded-full ${liveClassStatus.screenShare ? 'bg-white/20' : 'bg-red-800'}`}
               >
                 <Monitor size={20} />
               </button>
               <div>
                 <p className="text-sm opacity-90">Screen Share</p>
-                <span className="font-semibold">{liveStats.screenShare ? 'Sharing' : 'Ready'}</span>
+                <span className="font-semibold">{liveClassStatus.screenShare ? 'Sharing' : 'Ready'}</span>
               </div>
             </div>
             <div className="flex items-center space-x-3">
               <button 
-                onClick={toggleFullscreen}
+                onClick={handleToggleFullscreen}
                 className="p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
               >
-                {liveStats.isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
+                {liveClassStatus.isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
               </button>
               <div>
                 <p className="text-sm opacity-90">Fullscreen</p>
-                <span className="font-semibold">{liveStats.isFullscreen ? 'On' : 'Off'}</span>
+                <span className="font-semibold">{liveClassStatus.isFullscreen ? 'On' : 'Off'}</span>
               </div>
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Tabs and Filters */}
       <div className="bg-white rounded-2xl shadow-sm p-6">
@@ -1307,13 +1473,13 @@ export default function LectureManagementContent() {
                 placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-full md:w-64 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-full md:w-64 focus:ring-2 focus:ring-primary-dark focus:border-transparent"
               />
             </div>
             <select
               value={selectedCourse}
               onChange={(e) => setSelectedCourse(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-dark focus:border-transparent"
             >
               {courses.map((course) => (
                 <option key={course.id} value={course.id}>
@@ -1340,12 +1506,12 @@ export default function LectureManagementContent() {
 
         {/* Upload Progress */}
         {isUploading && (
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="mb-6 p-4 bg-primary-lighter border border-primary-light rounded-lg">
             <div className="flex items-center justify-between mb-2">
-              <span className="font-medium text-blue-800">Uploading file...</span>
-              <span className="text-blue-800">{uploadProgress}%</span>
+              <span className="font-medium text-primary-dark">Uploading file...</span>
+              <span className="text-primary-dark">{uploadProgress}%</span>
             </div>
-            <div className="w-full bg-blue-200 rounded-full h-2">
+            <div className="w-full bg-gray-200 rounded-full h-2">
               <div
                 className="bg-primary-dark h-2 rounded-full transition-all duration-300"
                 style={{ width: `${uploadProgress}%` }}
@@ -1365,7 +1531,7 @@ export default function LectureManagementContent() {
               <select
                 value={filters.type}
                 onChange={(e) => setFilters(prev => ({ ...prev, type: e.target.value }))}
-                className="px-3 py-1 text-sm border border-gray-300 rounded-lg"
+                className="px-3 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-dark focus:border-transparent"
               >
                 <option value="all">All Types</option>
                 <option value="video">Video</option>
@@ -1445,13 +1611,6 @@ export default function LectureManagementContent() {
                   </div>
 
                   <div className="flex space-x-2 mt-4">
-                    {/* <button 
-                      onClick={() => handlePreviewMaterial(material)}
-                      className="flex-1 px-3 py-2 bg-primary-dark hover:bg-primary-light text-white text-sm rounded-lg flex items-center justify-center space-x-1 transition-colors"
-                    >
-                      <Eye size={14} />
-                      <span>Preview</span>
-                    </button> */}
                     <button 
                       onClick={() => handleDownloadMaterial(material)}
                       className="flex-1 px-3 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm rounded-lg flex items-center justify-center space-x-1 transition-colors"
@@ -1470,7 +1629,7 @@ export default function LectureManagementContent() {
         {activeTab === 'live' && (
           <div className="space-y-4">
             {filteredSessions.map((session) => (
-              <div key={session.id} className="border border-gray-200 rounded-xl p-6 hover:border-blue-300 transition-colors bg-white">
+              <div key={session.id} className="border border-gray-200 rounded-xl p-6 hover:border-primary-light transition-colors bg-white">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-2">
@@ -1607,10 +1766,11 @@ export default function LectureManagementContent() {
                     <span>Share Link</span>
                   </button>
                   <button 
-                    onClick={() => handleRescheduleSession(session.id)}
-                    className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                    onClick={() => handleSetReminder(session)}
+                    className="px-4 py-2 bg-red-100 text-red-600 hover:bg-red-200 font-semibold rounded-lg flex items-center space-x-2"
                   >
-                    Reschedule
+                    <Bell size={16} />
+                    <span>Set Reminder</span>
                   </button>
                 </div>
               </div>
@@ -1685,7 +1845,7 @@ export default function LectureManagementContent() {
                     <select 
                       value={recordingSettings.quality}
                       onChange={(e) => setRecordingSettings(prev => ({ ...prev, quality: e.target.value }))}
-                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-dark focus:border-transparent"
                     >
                       <option>HD (720p)</option>
                       <option>Full HD (1080p)</option>
@@ -1699,7 +1859,7 @@ export default function LectureManagementContent() {
                     <select 
                       value={recordingSettings.retention}
                       onChange={(e) => setRecordingSettings(prev => ({ ...prev, retention: e.target.value }))}
-                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-dark focus:border-transparent"
                     >
                       <option>30 days</option>
                       <option>90 days</option>
@@ -1717,7 +1877,7 @@ export default function LectureManagementContent() {
                     <select 
                       value={recordingSettings.format}
                       onChange={(e) => setRecordingSettings(prev => ({ ...prev, format: e.target.value }))}
-                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-dark focus:border-transparent"
                     >
                       <option>mp4</option>
                       <option>webm</option>
@@ -1743,11 +1903,11 @@ export default function LectureManagementContent() {
 
             {/* Processing Queue */}
             {processingQueue.length > 0 && (
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+              <div className="p-4 bg-primary-lighter border border-primary-light rounded-xl">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center space-x-2">
                     <Sparkles className="text-primary-dark" size={20} />
-                    <h4 className="font-semibold text-blue-800">Processing Queue</h4>
+                    <h4 className="font-semibold text-primary-dark">Processing Queue</h4>
                   </div>
                   <span className="text-sm text-primary-dark">
                     {processingQueue.length} recording{processingQueue.length !== 1 ? 's' : ''} in queue
@@ -1759,7 +1919,7 @@ export default function LectureManagementContent() {
                     if (!recording) return null;
                     
                     return (
-                      <div key={recordingId} className="flex items-center justify-between p-3 bg-white rounded-lg border border-blue-100">
+                      <div key={recordingId} className="flex items-center justify-between p-3 bg-white rounded-lg border border-primary-light">
                         <div>
                           <div className="font-medium text-gray-800">{recording.title}</div>
                           <div className="text-sm text-gray-600">{recording.course}</div>
@@ -1799,7 +1959,7 @@ export default function LectureManagementContent() {
               <select
                 value={filters.status}
                 onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-                className="px-3 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="px-3 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-dark focus:border-transparent"
               >
                 <option value="all">All Status</option>
                 <option value="processed">Processed</option>
@@ -1895,13 +2055,13 @@ export default function LectureManagementContent() {
                       <Sparkles size={14} />
                       <span>Process</span>
                     </button>
-                    {/* <button 
+                    <button 
                       onClick={() => handleEditRecording(recording)}
                       className="flex-1 px-3 py-2 bg-primary-dark hover:bg-primary-light text-white text-sm rounded-lg flex items-center justify-center space-x-1 transition-colors"
                     >
                       <Edit size={14} />
                       <span>Edit</span>
-                    </button> */}
+                    </button>
                     <button 
                       onClick={() => handleDownloadRecording(recording)}
                       className="px-3 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm rounded-lg transition-colors"
@@ -1966,7 +2126,7 @@ export default function LectureManagementContent() {
                   type="text"
                   value={selectedMaterial.title}
                   onChange={(e) => setSelectedMaterial(prev => ({ ...prev, title: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-dark focus:border-transparent"
                 />
               </div>
               
@@ -1977,7 +2137,7 @@ export default function LectureManagementContent() {
                 <select
                   value={selectedMaterial.course}
                   onChange={(e) => setSelectedMaterial(prev => ({ ...prev, course: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-dark focus:border-transparent"
                 >
                   {courses.map(course => (
                     <option key={course.id} value={course.name}>
@@ -1994,7 +2154,7 @@ export default function LectureManagementContent() {
                 <select
                   value={selectedMaterial.type}
                   onChange={(e) => setSelectedMaterial(prev => ({ ...prev, type: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-dark focus:border-transparent"
                 >
                   <option value="video">Video</option>
                   <option value="slides">Slides</option>
@@ -2050,7 +2210,7 @@ export default function LectureManagementContent() {
                   type="text"
                   value={selectedSession.title}
                   onChange={(e) => setSelectedSession(prev => ({ ...prev, title: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-dark focus:border-transparent"
                 />
               </div>
               
@@ -2061,7 +2221,7 @@ export default function LectureManagementContent() {
                 <select
                   value={selectedSession.course}
                   onChange={(e) => setSelectedSession(prev => ({ ...prev, course: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-dark focus:border-transparent"
                 >
                   {courses.map(course => (
                     <option key={course.id} value={course.name}>
@@ -2078,7 +2238,7 @@ export default function LectureManagementContent() {
                 <select
                   value={selectedSession.duration}
                   onChange={(e) => setSelectedSession(prev => ({ ...prev, duration: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-dark focus:border-transparent"
                 >
                   <option>1 hour</option>
                   <option>1.5 hours</option>
@@ -2103,6 +2263,302 @@ export default function LectureManagementContent() {
                 className="px-4 py-2 bg-primary-dark hover:bg-primary-light text-white rounded-lg transition-colors"
               >
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Join Class Modal */}
+      {showJoinModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-800">Join Live Class</h3>
+              <button
+                onClick={handleLeaveClass}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3 p-3 bg-blue-50 rounded-lg">
+                <div className="p-2 bg-white rounded-lg">
+                  <Headphones className="text-primary-dark" size={20} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-gray-800">Audio Check</h4>
+                  <p className="text-sm text-gray-600">Make sure your microphone is working</p>
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-700">Enable Microphone</span>
+                  <button 
+                    onClick={handleToggleAudio}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      liveClassStatus.audio ? 'bg-green-500' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      liveClassStatus.audio ? 'translate-x-6' : 'translate-x-1'
+                    }`} />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-700">Enable Chat</span>
+                  <button 
+                    onClick={handleToggleChat}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      liveClassStatus.chat ? 'bg-green-500' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      liveClassStatus.chat ? 'translate-x-6' : 'translate-x-1'
+                    }`} />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={handleLeaveClass}
+                className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowJoinModal(false);
+                  // In real app, would navigate to live class
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center space-x-2"
+              >
+                <Play size={16} />
+                <span>Join Class</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Recording Modal */}
+      {showPreviewModal && selectedRecording && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-2xl w-full">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-800">Preview Recording</h3>
+              <button
+                onClick={() => setShowPreviewModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="aspect-video bg-gray-900 rounded-lg mb-4 flex items-center justify-center">
+              <div className="text-center">
+                <div className="w-16 h-16 mx-auto mb-4 bg-red-600 rounded-full flex items-center justify-center">
+                  <Play className="text-white" size={32} />
+                </div>
+                <p className="text-white font-semibold">{selectedRecording.title}</p>
+                <p className="text-gray-400 text-sm mt-1">Preview (30 seconds)</p>
+              </div>
+            </div>
+            
+            <div className="flex justify-between items-center">
+              <div>
+                <h4 className="font-bold text-gray-800">{selectedRecording.title}</h4>
+                <p className="text-sm text-gray-600">{selectedRecording.description}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowPreviewModal(false);
+                  handleWatchRecording(selectedRecording);
+                }}
+                className="px-4 py-2 bg-primary-dark hover:bg-primary-light text-white rounded-lg"
+              >
+                Watch Full Recording
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Watch Recording Modal */}
+      {showRecordingModal && selectedRecording && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-4xl w-full">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-800">Watch Recording</h3>
+              <div className="flex items-center space-x-2">
+                <button 
+                  onClick={() => handleShareRecording(selectedRecording)}
+                  className="p-2 hover:bg-gray-100 rounded-lg"
+                  title="Share"
+                >
+                  <Share2 size={20} />
+                </button>
+                <button
+                  onClick={() => setShowRecordingModal(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            
+            <div className="aspect-video bg-gray-900 rounded-lg mb-4 flex items-center justify-center">
+              <div className="text-center">
+                <div className="w-20 h-20 mx-auto mb-4 bg-primary-dark rounded-full flex items-center justify-center">
+                  <Play className="text-white" size={40} />
+                </div>
+                <p className="text-white font-semibold text-lg">{selectedRecording.title}</p>
+                <p className="text-gray-400 text-sm mt-1">Duration: {selectedRecording.duration}</p>
+              </div>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <h4 className="font-bold text-gray-800">{selectedRecording.title}</h4>
+                <p className="text-gray-600">{selectedRecording.description}</p>
+              </div>
+              
+              <div className="flex items-center justify-between text-sm text-gray-500">
+                <div className="flex items-center space-x-4">
+                  <span>{selectedRecording.date}</span>
+                  <span>•</span>
+                  <span>{selectedRecording.views} views</span>
+                </div>
+                <button
+                  onClick={() => setShowRecordingModal(false)}
+                  className="px-4 py-2 bg-primary-dark hover:bg-primary-light text-white rounded-lg"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Materials Modal */}
+      {showMaterialsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-2xl w-full">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-800">Class Materials</h3>
+              <button
+                onClick={() => setShowMaterialsModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              {materials.map((material) => (
+                <div key={material.id} className="p-4 border border-gray-200 rounded-lg hover:border-primary-light transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                        <FileText className="text-gray-600" size={24} />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-800">{material.title}</h4>
+                        <p className="text-sm text-gray-600">{material.description}</p>
+                        <p className="text-xs text-gray-500 mt-1">{material.type} • {material.size}</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => handleDownloadMaterial(material)}
+                      className="px-4 py-2 border border-primary-dark text-primary-dark hover:bg-primary-lighter rounded-lg flex items-center space-x-2"
+                    >
+                      <FileDown size={16} />
+                      <span>Download</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reminder Modal */}
+      {showReminderModal && selectedRecording && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-800">Set Reminder</h3>
+              <button
+                onClick={() => setShowReminderModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="p-3 bg-blue-50 rounded-lg">
+                <h4 className="font-bold text-gray-800">{selectedRecording.title}</h4>
+                <p className="text-sm text-gray-600">{selectedRecording.scheduled} • {selectedRecording.duration}</p>
+              </div>
+              
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Reminder Time
+                  </label>
+                  <select className="w-full p-3 border border-gray-300 rounded-lg">
+                    <option>15 minutes before</option>
+                    <option>30 minutes before</option>
+                    <option>1 hour before</option>
+                    <option>1 day before</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Notification Method
+                  </label>
+                  <div className="space-y-2">
+                    <label className="flex items-center">
+                      <input type="checkbox" className="rounded text-primary-dark" defaultChecked />
+                      <span className="ml-2 text-gray-700">Email</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input type="checkbox" className="rounded text-primary-dark" defaultChecked />
+                      <span className="ml-2 text-gray-700">Browser Notification</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input type="checkbox" className="rounded text-primary-dark" />
+                      <span className="ml-2 text-gray-700">Mobile Notification</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => setShowReminderModal(false)}
+                className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowReminderModal(false);
+                  console.log('Reminder set for:', selectedRecording);
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg"
+              >
+                Set Reminder
               </button>
             </div>
           </div>
