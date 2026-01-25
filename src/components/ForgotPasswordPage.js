@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Mail, ArrowLeft, CheckCircle, AlertCircle, Key, Shield, Lock, Eye, EyeOff } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image';
+import { api } from '@/services/api';
 
 export default function ForgotPasswordPage() {
   const [step, setStep] = useState(1); // 1: Request, 2: Code, 3: Reset
@@ -23,61 +23,162 @@ export default function ForgotPasswordPage() {
     confirm: false
   });
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // Step 1: Request password reset code
+  const handleRequestResetCode = async () => {
     setError('');
     setSuccess('');
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      switch (step) {
-        case 1:
-          // Email validation
-          if (!formData.email || !formData.email.includes('@')) {
-            setError('Please enter a valid email address');
-          } else {
-            setSuccess('Reset code sent to your email');
-            setTimeout(() => setStep(2), 1500);
-          }
-          break;
+    try {
+      const response = await api.post('/auths/forgot-password', {
+        email: formData.email
+      });
 
-        case 2:
-          // Code validation
-          if (formData.code.length !== 6) {
-            setError('Please enter the 6-digit code');
-          } else {
-            setSuccess('Code verified successfully');
-            setTimeout(() => setStep(3), 1500);
-          }
-          break;
-
-        case 3:
-          // Password reset
-          if (!formData.newPassword || !formData.confirmPassword) {
-            setError('Please fill in all fields');
-          } else if (formData.newPassword.length < 8) {
-            setError('Password must be at least 8 characters long');
-          } else if (formData.newPassword !== formData.confirmPassword) {
-            setError('Passwords do not match');
-          } else {
-            setSuccess('Password reset successful! Redirecting to login...');
-            setTimeout(() => {
-              window.location.href = '/login';
-            }, 2000);
-          }
-          break;
+      if (response.status === 200 || response.status === 201) {
+        setSuccess('Reset code sent to your email. Please check your inbox.');
+        setTimeout(() => setStep(2), 1500);
+      } else {
+        setError(response.message || 'Failed to send reset code. Please try again.');
       }
+    } catch (err) {
+      console.error('Error sending reset code:', err);
+      setError(err.message || 'Failed to send reset code. Please try again.');
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
-  const handleResendCode = () => {
+  // Step 2: Validate reset code
+  const handleValidateCode = async () => {
+    setError('');
+    setSuccess('');
     setIsLoading(true);
-    setTimeout(() => {
-      setSuccess('New code sent to your email');
+
+    try {
+      const response = await api.post('/auths/validate-reset-token', {
+        email: formData.email,
+        verification_code: formData.code
+      });
+
+      if (response.status === 200 || response.status === 201) {
+        setSuccess('Code verified successfully. You can now reset your password.');
+        setTimeout(() => setStep(3), 1500);
+      } else {
+        setError(response.message || 'Invalid verification code. Please try again.');
+      }
+    } catch (err) {
+      console.error('Error validating code:', err);
+      setError(err.message || 'Invalid verification code. Please try again.');
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
+  };
+
+  // Step 3: Reset password
+  const handleResetPassword = async () => {
+    setError('');
+    setSuccess('');
+    
+    // Validate passwords
+    if (!formData.newPassword || !formData.confirmPassword) {
+      setError('Please fill in all fields');
+      return;
+    }
+
+    if (formData.newPassword.length < 8) {
+      setError('Password must be at least 8 characters long');
+      return;
+    }
+
+    if (formData.newPassword !== formData.confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const response = await api.post('/auths/reset-password', {
+        email: formData.email,
+        verification_code: formData.code,
+        password: formData.newPassword
+      });
+
+      if (response.status === 200 || response.status === 201) {
+        setSuccess('Password reset successful! Redirecting to login...');
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 2000);
+      } else {
+        setError(response.message || 'Failed to reset password. Please try again.');
+      }
+    } catch (err) {
+      console.error('Error resetting password:', err);
+      setError(err.message || 'Failed to reset password. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    switch (step) {
+      case 1:
+        // Email validation
+        if (!formData.email || !formData.email.includes('@')) {
+          setError('Please enter a valid email address');
+          return;
+        }
+        await handleRequestResetCode();
+        break;
+
+      case 2:
+        // Code validation
+        if (!formData.code || formData.code.length !== 6) {
+          setError('Please enter the 6-digit code');
+          return;
+        }
+        await handleValidateCode();
+        break;
+
+      case 3:
+        await handleResetPassword();
+        break;
+    }
+  };
+
+  const handleResendCode = async () => {
+    setError('');
+    setSuccess('');
+    setIsLoading(true);
+
+    try {
+      const response = await api.post('/auths/forgot-password', {
+        email: formData.email
+      });
+
+      if (response.status === 200 || response.status === 201) {
+        setSuccess('New code sent to your email');
+      } else {
+        setError(response.message || 'Failed to resend code. Please try again.');
+      }
+    } catch (err) {
+      console.error('Error resending code:', err);
+      setError(err.message || 'Failed to resend code. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const goBack = () => {
+    if (step > 1) {
+      setStep(step - 1);
+    } else {
+      window.location.href = '/login';
+    }
   };
 
   return (
@@ -236,6 +337,7 @@ export default function ForgotPasswordPage() {
                       className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-dark focus:border-primary-dark"
                       placeholder="admin@edutech.com"
                       required
+                      disabled={isLoading}
                     />
                   </div>
                   <p className="text-sm text-gray-500 mt-2">
@@ -262,6 +364,7 @@ export default function ForgotPasswordPage() {
                       className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-dark focus:border-primary-dark text-center text-xl tracking-widest font-mono"
                       placeholder="000000"
                       required
+                      disabled={isLoading}
                     />
                   </div>
                   <div className="flex items-center justify-between mt-4">
@@ -272,7 +375,7 @@ export default function ForgotPasswordPage() {
                       type="button"
                       onClick={handleResendCode}
                       disabled={isLoading}
-                      className="text-sm text-primary-dark hover:text-primary transition-colors disabled:opacity-50"
+                      className="text-sm text-primary-dark hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isLoading ? 'Sending...' : 'Resend Code'}
                     </button>
@@ -315,11 +418,13 @@ export default function ForgotPasswordPage() {
                       className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-dark focus:border-primary-dark"
                       placeholder="Enter new password"
                       required
+                      disabled={isLoading}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword({ ...showPassword, new: !showPassword.new })}
                       className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      disabled={isLoading}
                     >
                       {showPassword.new ? <EyeOff size={20} /> : <Eye size={20} />}
                     </button>
@@ -360,11 +465,13 @@ export default function ForgotPasswordPage() {
                       className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-dark focus:border-primary-dark"
                       placeholder="Confirm new password"
                       required
+                      disabled={isLoading}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword({ ...showPassword, confirm: !showPassword.confirm })}
                       className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      disabled={isLoading}
                     >
                       {showPassword.confirm ? <EyeOff size={20} /> : <Eye size={20} />}
                     </button>
@@ -443,14 +550,9 @@ export default function ForgotPasswordPage() {
             {/* Cancel/Back Button */}
             <button
               type="button"
-              onClick={() => {
-                if (step > 1) {
-                  setStep(step - 1);
-                } else {
-                  window.location.href = '/login';
-                }
-              }}
-              className="w-full border border-gray-300 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 font-medium mt-3"
+              onClick={goBack}
+              disabled={isLoading}
+              className="w-full border border-gray-300 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 font-medium mt-3 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ArrowLeft size={18} />
               {step === 1 ? 'Cancel' : 'Go Back'}

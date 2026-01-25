@@ -5,73 +5,129 @@ import { Mail, Lock, Eye, EyeOff, User, LogIn, BookOpen, CheckCircle, AlertCircl
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { api } from '@/services/api';
+import { useAuth } from '@/context/AuthContext';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { login } = useAuth(); // Get login function from AuthContext
+  
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [formErrors, setFormErrors] = useState({
+    email: '',
+    password: '',
+  });
 
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
 
+  // Validation functions
+  const validateEmail = (email) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email) return 'Email is required';
+    if (!emailRegex.test(email)) return 'Please enter a valid email address';
+    return '';
+  };
+
+  const validatePassword = (password) => {
+    if (!password) return 'Password is required';
+    if (password.length < 6) return 'Password must be at least 6 characters';
+    return '';
+  };
+
+  const validateForm = () => {
+    const emailError = validateEmail(formData.email);
+    const passwordError = validatePassword(formData.password);
+    
+    setFormErrors({
+      email: emailError,
+      password: passwordError,
+    });
+
+    return !emailError && !passwordError;
+  };
+
+  const handleInputChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    // Clear field error when user starts typing
+    if (formErrors[field]) {
+      setFormErrors(prev => ({ ...prev, [field]: '' }));
+    }
+    setError('');
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
+    
+    // Validate form
+    if (!validateForm()) {
+      return;
+    }
+
     setIsLoading(true);
 
-    // Simple validation
-    if (!formData.email || !formData.password) {
-      setError('Please fill in all fields');
-      setIsLoading(false);
-      return;
-    }
+    try {
+      // API call to login endpoint
+      const response = await api.post('/auths/login', {
+        email: formData.email,
+        password: formData.password
+      });
 
-    if (!formData.email.includes('@')) {
-      setError('Please enter a valid email address');
-      setIsLoading(false);
-      return;
-    }
-
-        setTimeout(() => {
-          router.push('/');
-        }, 1000);
-
-    // Simulate API call
-    setTimeout(() => {
-      // Mock login logic
-      if (formData.email === 'admin@edutech.com' && formData.password === 'password123') {
-        setSuccess('Login successful! Redirecting...');
-        // Store login state
-        localStorage.setItem('isLoggedIn', 'true');
-        localStorage.setItem('userEmail', formData.email);
+      // Check if response is successful
+      if (response.status === 200 && response.data) {
+        setSuccess(response.message || 'Login successful!');
         
-        // Redirect after delay
-        setTimeout(() => {
-          router.push('/dashboard');
-        }, 1500);
+        // Get user data and token from response
+        const { user, token } = response.data;
+        
+        // Use the login function from AuthContext
+        // This will handle all storage and redirect
+        login(user, token, rememberMe);
+        
+        // Note: No need for setTimeout or manual redirect here
+        // The login function from AuthContext will handle the redirect
+        
       } else {
-        setError('Invalid email or password');
+        setError(response.message || 'Login failed. Please try again.');
       }
+      
+    } catch (err) {
+      console.error('Login error:', err);
+      
+      // Handle specific error cases
+      if (err.message.includes('401') || err.message.includes('Invalid credentials')) {
+        setError('Invalid email or password');
+      } else if (err.message.includes('Network')) {
+        setError('Network error. Please check your connection.');
+      } else if (err.message.includes('404')) {
+        setError('Service unavailable. Please try again later.');
+      } else {
+        setError(err.message || 'An error occurred during login');
+      }
+      
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
-
   const handleDemoLogin = (role) => {
-    setFormData({
+    const demoCredentials = {
       email: `${role}@edutech.com`,
       password: 'demo123'
-    });
+    };
     
-    setTimeout(() => {
-      setSuccess(`Demo login as ${role} ready. Click Login to continue.`);
-    }, 100);
+    setFormData(demoCredentials);
+    setFormErrors({ email: '', password: '' });
+    setError('');
+    setSuccess(`Demo login as ${role} ready. Click Login to continue.`);
   };
 
   return (
@@ -88,9 +144,9 @@ export default function LoginPage() {
         <div className="relative z-10 flex flex-col justify-between p-12 text-white h-full">
           <div>
             <div className="flex items-center gap-3 mb-8">
-                        <div className=" bg-white rounded-xl">
-                          <Image src="/assets/images/ddTechLogo.png" alt="logo" width="50" height="50" className="w-[80px] p-0" />
-                        </div>
+              <div className="bg-white rounded-xl">
+                <Image src="/assets/images/ddTechLogo.png" alt="logo" width="50" height="50" className="w-[80px] p-0" />
+              </div>
               <div>
                 <h1 className="text-2xl font-bold">DDTech</h1>
                 <p className="text-primary-lighter text-sm">Learning Platform</p>
@@ -159,7 +215,7 @@ export default function LoginPage() {
             <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-dark rounded-2xl mb-4">
               <BookOpen className="text-white" size={32} />
             </div>
-            <h1 className="text-3xl font-bold text-gray-900">DDTech Teacher</h1>
+            <h1 className="text-3xl font-bold text-gray-900">DDTech Admin</h1>
             <p className="text-gray-600 mt-2">Sign in to your admin dashboard</p>
           </div>
 
@@ -168,27 +224,20 @@ export default function LoginPage() {
             <p className="text-gray-600">Enter your credentials to access the dashboard</p>
           </div>
 
-          {/* Demo Login Buttons */}
-          {/* <div className="grid grid-cols-3 gap-3 mb-6">
-            <button
-              onClick={() => handleDemoLogin('admin')}
-              className="bg-blue-50 text-blue-700 px-3 py-2 rounded-lg text-sm hover:bg-blue-100 transition-colors border border-blue-100"
-            >
-              Admin
-            </button>
-            <button
-              onClick={() => handleDemoLogin('teacher')}
-              className="bg-green-50 text-green-700 px-3 py-2 rounded-lg text-sm hover:bg-green-100 transition-colors border border-green-100"
-            >
-              Teacher
-            </button>
-            <button
-              onClick={() => handleDemoLogin('moderator')}
-              className="bg-purple-50 text-purple-700 px-3 py-2 rounded-lg text-sm hover:bg-purple-100 transition-colors border border-purple-100"
-            >
-              Moderator
-            </button>
-          </div> */}
+          {/* Error/Success Messages */}
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+              <AlertCircle className="text-red-500" size={20} />
+              <p className="text-red-700 text-sm">{error}</p>
+            </div>
+          )}
+
+          {success && (
+            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3">
+              <CheckCircle className="text-green-500" size={20} />
+              <p className="text-green-700 text-sm">{success}</p>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit}>
             {/* Email Field */}
@@ -201,12 +250,16 @@ export default function LoginPage() {
                 <input
                   type="email"
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-dark focus:border-primary-dark"
+                  onChange={(e) => handleInputChange('email', e.target.value)}
+                  className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-dark focus:border-primary-dark ${
+                    formErrors.email ? 'border-red-300' : 'border-gray-300'
+                  }`}
                   placeholder="admin@edutech.com"
-                  required
                 />
               </div>
+              {formErrors.email && (
+                <p className="mt-1 text-sm text-red-600">{formErrors.email}</p>
+              )}
             </div>
 
             {/* Password Field */}
@@ -227,10 +280,11 @@ export default function LoginPage() {
                 <input
                   type={showPassword ? "text" : "password"}
                   value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-dark focus:border-primary-dark"
-                  placeholder="••••••••"
-                  required
+                  onChange={(e) => handleInputChange('password', e.target.value)}
+                  className={`w-full pl-10 pr-10 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-dark focus:border-primary-dark ${
+                    formErrors.password ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                  placeholder="Enter your password"
                 />
                 <button
                   type="button"
@@ -240,6 +294,9 @@ export default function LoginPage() {
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
+              {formErrors.password && (
+                <p className="mt-1 text-sm text-red-600">{formErrors.password}</p>
+              )}
             </div>
 
             {/* Remember Me */}
@@ -257,21 +314,6 @@ export default function LoginPage() {
                 </label>
               </div>
             </div>
-
-            {/* Error/Success Messages */}
-            {/* {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
-                <AlertCircle className="text-red-500 mt-0.5 flex-shrink-0" size={18} />
-                <span className="text-sm text-red-700">{error}</span>
-              </div>
-            )}
-
-            {success && (
-              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-start gap-2">
-                <CheckCircle className="text-green-500 mt-0.5 flex-shrink-0" size={18} />
-                <span className="text-sm text-green-700">{success}</span>
-              </div>
-            )} */}
 
             {/* Login Button */}
             <button
@@ -293,43 +335,21 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Divider */}
-          {/* <div className="flex items-center my-8">
-            <div className="flex-1 border-t border-gray-300"></div>
-            <span className="mx-4 text-sm text-gray-500">Or continue with</span>
-            <div className="flex-1 border-t border-gray-300"></div>
-          </div> */}
-
-          {/* Social Login */}
-          {/* <div className="grid grid-cols-2 gap-3 mb-6">
-            <button className="flex items-center justify-center gap-2 border border-gray-300 text-gray-700 py-2.5 rounded-lg hover:bg-gray-50 transition-colors">
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-              </svg>
-              Google
-            </button>
-            <button className="flex items-center justify-center gap-2 border border-gray-300 text-gray-700 py-2.5 rounded-lg hover:bg-gray-50 transition-colors">
-              <svg className="w-5 h-5" fill="#000000" viewBox="0 0 24 24">
-                <path d="M12 2.04c-5.5 0-10 4.49-10 10.02 0 5 3.66 9.15 8.44 9.9v-7H7.9v-2.9h2.54V9.85c0-2.51 1.49-3.89 3.78-3.89 1.09 0 2.23.19 2.23.19v2.47h-1.26c-1.24 0-1.63.77-1.63 1.56v1.88h2.78l-.45 2.9h-2.33v7a10 10 0 008.44-9.9c0-5.53-4.5-10.02-10-10.02z"/>
-              </svg>
-              Microsoft
-            </button>
-          </div> */}
-
-          {/* Sign Up Link */}
-          {/* <div className="text-center">
-            <p className="text-gray-600 text-sm">
-              Don't have an account?{' '}
-              <Link 
-                href="/register" 
-                className="text-primary-dark hover:text-primary font-medium transition-colors"
-              >
-                Request Access
-              </Link>
-            </p>
+          {/* Demo Login Buttons (Optional) */}
+          {/* <div className="mt-6">
+            <p className="text-center text-gray-600 text-sm mb-3">Try demo accounts:</p>
+            <div className="flex gap-2">
+              {['admin', 'teacher', 'student'].map((role) => (
+                <button
+                  key={role}
+                  type="button"
+                  onClick={() => handleDemoLogin(role)}
+                  className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors capitalize"
+                >
+                  {role}
+                </button>
+              ))}
+            </div>
           </div> */}
 
           {/* Footer */}

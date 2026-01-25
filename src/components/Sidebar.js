@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { usePathname } from 'next/navigation';
 import Image from "next/image";
+import { useAuth } from '@/context/AuthContext';
 
 import {
   Home,
@@ -39,6 +40,12 @@ export default function TeacherSidebar() {
   const pathname = usePathname();
   const router = useRouter();
 
+    // Use AuthContext instead of direct localStorage
+  const { user, logout, isAuthenticated } = useAuth();
+
+  // Load user info from AuthContext
+  const userInfo = user;
+
   const toggleDropdown = (dropdown) => {
     setOpenDropdowns(prev => ({
       ...prev,
@@ -46,19 +53,59 @@ export default function TeacherSidebar() {
     }));
   };
 
-  const handleLogoutClick = (e) => {
-    e.preventDefault();
+  const handleLogoutClick = () => {
     setShowLogoutConfirm(true);
   };
 
   const confirmLogout = () => {
+    logout(); // Use logout from AuthContext
     setShowLogoutConfirm(false);
-    // Here you can add your actual logout logic (clear tokens, etc.)
-    router.push('/login');
   };
 
   const cancelLogout = () => {
     setShowLogoutConfirm(false);
+  };
+
+    // Format user name
+  const getUserFullName = () => {
+    if (!userInfo) return 'Administrator';
+    const firstName = userInfo.first_name || '';
+    const lastName = userInfo.last_name || '';
+    return `${firstName} ${lastName}`.trim() || 'Administrator';
+  };
+
+  const getUserInitials = () => {
+  if (!userInfo) return 'A';
+  
+  const { first_name = '', last_name = '' } = userInfo;
+  
+  // Filter out empty strings and get first letters
+  const initials = [first_name, last_name]
+    .filter(name => name.trim())
+    .map(name => name.charAt(0).toUpperCase())
+    .join('');
+  
+  return initials || 'A';
+};
+
+    // Get user email
+  const getUserEmail = () => {
+    if (!userInfo) return 'admin@example.com';
+    return userInfo.email || 'admin@example.com';
+  };
+
+    // Get user role with proper formatting
+  const getUserRole = () => {
+    if (!userInfo) return 'Teacher';
+    
+    if (userInfo.role) {
+      const role = userInfo.role;
+      return role === 'Super Admin' ? 'Super Admin' : 
+             role === 'Admin' ? 'Teacher' : 
+             role.charAt(0).toUpperCase() + role.slice(1);
+    }
+    
+    return userInfo.type || 'Teacher';
   };
 
   const teachingToolsItems = [
@@ -77,6 +124,13 @@ export default function TeacherSidebar() {
     { id: 'notifications', label: 'Notifications', icon: Bell, href: '/notifications' },
     { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
   ];
+
+    // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!isAuthenticated && pathname !== '/login') {
+      router.push('/login');
+    }
+  }, [isAuthenticated, pathname, router]);
 
   return (
     <>
@@ -261,11 +315,11 @@ export default function TeacherSidebar() {
         <div className="flex-shrink-0 w-full p-4 border-t border-primary-light">
           <div className="flex items-center space-x-3 p-3 bg-primary-lighter rounded-lg mb-3">
             <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-              <span className="font-bold text-white">SJ</span>
+              <span className="font-bold text-white">{getUserInitials()}</span>
             </div>
             <div className="flex-1">
-              <p className="font-medium text-primary-dark">Dr. Sarah Johnson</p>
-              <p className="text-sm text-primary-dark">Computer Science</p>
+              <p className="font-medium text-primary-dark">{getUserFullName()}</p>
+              <p className="text-sm text-primary-dark">{getUserRole()}</p>
             </div>
           </div>
           
