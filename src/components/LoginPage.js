@@ -254,7 +254,7 @@ export default function LoginPage() {
                   className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-dark focus:border-primary-dark ${
                     formErrors.email ? 'border-red-300' : 'border-gray-300'
                   }`}
-                  placeholder="admin@edutech.com"
+                  placeholder="teacher@edutech.com"
                 />
               </div>
               {formErrors.email && (
