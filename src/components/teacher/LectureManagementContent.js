@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { initializeZegoCloud, leaveRoom, generateRoomID, generateUserID } from '@/utils/zegocloud';
 import { 
   Upload, 
   Video, 
@@ -62,6 +63,13 @@ export default function LectureManagementContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedSession, setExpandedSession] = useState(null);
   
+  // ZEGOCLOUD state
+const [zegoInstance, setZegoInstance] = useState(null);
+const [currentRoomID, setCurrentRoomID] = useState('');
+const [currentUserID, setCurrentUserID] = useState('');
+const [showVideoCall, setShowVideoCall] = useState(false);
+const meetingContainerRef = useRef(null);
+
   // Materials state
   const [materials, setMaterials] = useState([
     {
@@ -413,38 +421,121 @@ export default function LectureManagementContent() {
   };
 
   // Live session handlers - UPDATED TO MATCH FIRST CODE STYLE
-  const startLiveSession = () => {
+const startLiveSession = async () => {
+  try {
+    const roomID = generateRoomID();
+    const userID = generateUserID();
+    
+    setCurrentRoomID(roomID);
+    setCurrentUserID(userID);
     setIsLive(true);
-    setLiveClassStatus(prev => ({ ...prev, participants: 0, isJoined: true }));
-    setShowJoinModal(true);
+    setShowVideoCall(true);
+    setLiveClassStatus(prev => ({ ...prev, participants: 1, isJoined: true }));
     
-    // Simulate students joining
-    const interval = setInterval(() => {
-      setLiveClassStatus(prev => {
-        if (prev.participants >= 45) {
-          clearInterval(interval);
-          return prev;
+    // Wait for the container to be rendered
+    setTimeout(async () => {
+      if (meetingContainerRef.current) {
+        try {
+          const zc = await initializeZegoCloud(
+            meetingContainerRef.current,
+            roomID,
+            userID,
+            'Instructor',
+            {
+              microphone: liveClassStatus.audio,
+              camera: liveClassStatus.video,
+              chat: liveClassStatus.chat,
+              recording: recordingSettings.recordAll,
+              maxUsers: 50,
+              onJoinRoom: () => {
+                console.log('Instructor joined the room');
+              },
+              onLeaveRoom: () => {
+                handleLeaveClass();
+              },
+              onUserJoin: (users) => {
+                setLiveClassStatus(prev => ({
+                  ...prev,
+                  participants: prev.participants + users.length
+                }));
+              },
+              onUserLeave: (users) => {
+                setLiveClassStatus(prev => ({
+                  ...prev,
+                  participants: Math.max(0, prev.participants - users.length)
+                }));
+              },
+            }
+          );
+          
+          setZegoInstance(zc);
+        } catch (error) {
+          console.error('Failed to initialize video call:', error);
+          alert('Failed to start video call. Please check your ZEGOCLOUD credentials in .env.local');
+          setIsLive(false);
+          setShowVideoCall(false);
         }
-        return { 
-          ...prev, 
-          participants: prev.participants + 1
-        };
-      });
-    }, 500);
+      }
+    }, 100);
     
-    alert('Live session started! Students can now join.');
-  };
+  } catch (error) {
+    console.error('Error starting live session:', error);
+    alert('Failed to start live session: ' + error.message);
+  }
+};
 
   const handleJoinClass = () => {
     setLiveClassStatus(prev => ({ ...prev, isJoined: true }));
     setShowJoinModal(true);
   };
 
-  const handleLeaveClass = () => {
-    setLiveClassStatus(prev => ({ ...prev, isJoined: false }));
-    setShowJoinModal(false);
-    setIsLive(false);
+const handleLeaveClass = () => {
+  if (zegoInstance) {
+    leaveRoom(zegoInstance);
+    setZegoInstance(null);
+  }
+  
+  setLiveClassStatus(prev => ({ ...prev, isJoined: false }));
+  setShowVideoCall(false);
+  setIsLive(false);
+  
+  // Create recording
+  const newRecordingId = recordings.length > 0 ? Math.max(...recordings.map(r => r.id)) + 1 : 1;
+  const newRecording = {
+    id: newRecordingId,
+    title: `Live Session ${new Date().toLocaleDateString()}`,
+    course: 'Web App Development',
+    date: new Date().toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric' 
+    }),
+    duration: '1h 30m',
+    size: '1.5 GB',
+    status: 'raw',
+    views: 0,
+    captionStatus: 'none',
+    downloadCount: 0,
+    description: 'Live session recording',
+    resolution: '1080p',
+    audioQuality: 'High',
+    chapters: [],
+    processing: {
+      progress: 0,
+      status: 'pending',
+      steps: [
+        { name: 'Video Optimization', completed: false },
+        { name: 'Audio Enhancement', completed: false },
+        { name: 'Caption Generation', completed: false },
+        { name: 'Chapter Detection', completed: false }
+      ]
+    },
+    favorite: false
   };
+  
+  setRecordings(prev => [newRecording, ...prev]);
+  alert('Live session ended and recorded!');
+};
 
   const handleToggleFullscreen = () => {
     setLiveClassStatus(prev => ({ ...prev, isFullscreen: !prev.isFullscreen }));
@@ -520,6 +611,14 @@ export default function LectureManagementContent() {
       alert('Lecture material deleted successfully.');
     }
   };
+
+  useEffect(() => {
+  return () => {
+    if (zegoInstance) {
+      leaveRoom(zegoInstance);
+    }
+  };
+}, [zegoInstance]);
 
   const handleEditMaterial = (material) => {
     setSelectedMaterial(material);
@@ -624,13 +723,12 @@ export default function LectureManagementContent() {
     setSelectedSession(null);
   };
 
-  const handleStartSession = (sessionId) => {
-    const session = sessions.find(s => s.id === sessionId);
-    alert(`Starting session: ${session?.title}`);
-    setIsLive(true);
-    setLiveClassStatus(prev => ({ ...prev, participants: 0, isJoined: true }));
-    setShowJoinModal(true);
-  };
+const handleStartSession = async (sessionId) => {
+  const session = sessions.find(s => s.id === sessionId);
+  if (session) {
+    await startLiveSession();
+  }
+};
 
   const handleCopyLink = (link) => {
     navigator.clipboard.writeText(link);
@@ -1245,189 +1343,65 @@ export default function LectureManagementContent() {
       </div>
 
       {/* Live Class Now Section - UPDATED TO MATCH FIRST CODE STYLE */}
-      {isLive && (
-        <div className="bg-white rounded-2xl shadow-sm p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-gray-800">Live Class Now</h2>
-            <div className="flex items-center space-x-2 text-red-600">
-              <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></div>
-              <span className="font-semibold">LIVE NOW</span>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Video Player */}
-            <div className="bg-gray-900 rounded-xl overflow-hidden">
-              <div className="aspect-video bg-black flex items-center justify-center relative">
-                {!liveClassStatus.isJoined ? (
-                  <div className="text-center">
-                    <div className="w-16 h-16 mx-auto mb-4 bg-red-600 rounded-full flex items-center justify-center animate-pulse">
-                      <Play className="text-white" size={32} />
-                    </div>
-                    <p className="text-white font-semibold">Live Class in Progress</p>
-                    <p className="text-gray-400 text-sm mt-1">Advanced JavaScript Concepts</p>
-                  </div>
-                ) : (
-                  <div className="w-full h-full flex flex-col">
-                    {/* Video controls */}
-                    <div className="absolute top-4 right-4 flex space-x-2">
-                      <button 
-                        onClick={handleToggleFullscreen}
-                        className="p-2 bg-black/50 text-white rounded-lg hover:bg-black/70"
-                      >
-                        {liveClassStatus.isFullscreen ? <Maximize2 size={20} /> : <Maximize2 size={20} />}
-                      </button>
-                      <button 
-                        onClick={handleToggleMute}
-                        className="p-2 bg-black/50 text-white rounded-lg hover:bg-black/70"
-                      >
-                        {liveClassStatus.isMuted ? <Volume2 size={20} /> : <Volume2 size={20} />}
-                      </button>
-                    </div>
-                    
-                    {/* Simulated video content */}
-                    <div className="flex-1 flex items-center justify-center">
-                      <div className="text-center">
-                        <div className="w-16 h-16 mx-auto mb-4 bg-red-600 rounded-full flex items-center justify-center">
-                          <Play className="text-white" size={32} />
-                        </div>
-                        <p className="text-white font-semibold">Connected to Live Class</p>
-                        <p className="text-gray-400 text-sm mt-1">{liveClassStatus.participants} participants</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="p-4 bg-gray-800">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-white font-semibold">Advanced JavaScript Concepts</h3>
-                    <p className="text-gray-400 text-sm">Dr. Sarah Johnson</p>
-                  </div>
-                  <button 
-                    onClick={handleLeaveClass}
-                    className="bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-2 rounded-lg flex items-center space-x-2"
-                  >
-                    <Play size={20} />
-                    <span>Leave Class</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Class Details */}
-            <div className="space-y-4">
-              <div className="p-4 border border-gray-200 rounded-lg">
-                <div className="flex items-center space-x-3 mb-3">
-                  <Calendar className="text-primary-dark" size={24} />
-                  <div>
-                    <h3 className="font-semibold">Class Schedule</h3>
-                    <p className="text-sm text-gray-600">Monday, December 13 • 10:00 AM</p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <Clock className="text-green-600" size={24} />
-                  <div>
-                    <h3 className="font-semibold">Duration</h3>
-                    <p className="text-sm text-gray-600">2 hours</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 border border-gray-200 rounded-lg">
-                <div className="flex items-center space-x-3 mb-3">
-                  <Users className="text-purple-600" size={24} />
-                  <div>
-                    <h3 className="font-semibold">Participants</h3>
-                    <p className="text-sm text-gray-600">{liveClassStatus.participants} students online</p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <Mic className="text-orange-600" size={24} />
-                  <div>
-                    <h3 className="font-semibold">Audio Setup</h3>
-                    <p className="text-sm text-gray-600">Microphone & speakers ready</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+{isLive && showVideoCall && (
+  <div className="bg-white rounded-2xl shadow-sm p-6">
+    <div className="flex items-center justify-between mb-6">
+      <h2 className="text-xl font-bold text-gray-800">Live Class Now</h2>
+      <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-2 text-red-600">
+          <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></div>
+          <span className="font-semibold">LIVE NOW</span>
+        </div>
+        <button 
+          onClick={handleLeaveClass}
+          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors"
+        >
+          End Session
+        </button>
+      </div>
+    </div>
+    
+    {/* ZEGOCLOUD Video Container */}
+    <div 
+      ref={meetingContainerRef} 
+      className="w-full rounded-xl overflow-hidden bg-gray-900"
+      style={{ height: '600px' }}
+    />
+    
+    {/* Session Info */}
+    <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="p-4 bg-gray-50 rounded-lg">
+        <div className="flex items-center space-x-3">
+          <Users className="text-purple-600" size={24} />
+          <div>
+            <h3 className="font-semibold">Participants</h3>
+            <p className="text-sm text-gray-600">{liveClassStatus.participants} online</p>
           </div>
         </div>
-      )}
-
-      {/* Live Session Controls */}
-      {/* {isLive && (
-        <div className="bg-gradient-to-r from-red-600 to-orange-600 rounded-2xl p-6 text-white">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-3">
-              <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
-              <h2 className="text-xl font-bold">Live Session in Progress</h2>
-            </div>
-            <div className="flex items-center space-x-2">
-              <span className="bg-white/20 px-3 py-1 rounded-full text-sm">
-                {liveClassStatus.participants} Students Connected
-              </span>
-              <button
-                onClick={stopLiveSession}
-                className="px-4 py-2 bg-white text-red-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                End Session
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="flex items-center space-x-3">
-              <button 
-                onClick={handleToggleAudio}
-                className={`p-2 rounded-full ${liveClassStatus.audio ? 'bg-white/20' : 'bg-red-800'}`}
-              >
-                {liveClassStatus.audio ? <Mic size={20} /> : <MicOff size={20} />}
-              </button>
-              <div>
-                <p className="text-sm opacity-90">Microphone</p>
-                <span className="font-semibold">{liveClassStatus.audio ? 'Connected' : 'Muted'}</span>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3">
-              <button 
-                onClick={handleToggleVideo}
-                className={`p-2 rounded-full ${liveClassStatus.video ? 'bg-white/20' : 'bg-red-800'}`}
-              >
-                {liveClassStatus.video ? <Camera size={20} /> : <EyeOff size={20} />}
-              </button>
-              <div>
-                <p className="text-sm opacity-90">Camera</p>
-                <span className="font-semibold">{liveClassStatus.video ? 'Active' : 'Off'}</span>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3">
-              <button 
-                onClick={handleToggleScreenShare}
-                className={`p-2 rounded-full ${liveClassStatus.screenShare ? 'bg-white/20' : 'bg-red-800'}`}
-              >
-                <Monitor size={20} />
-              </button>
-              <div>
-                <p className="text-sm opacity-90">Screen Share</p>
-                <span className="font-semibold">{liveClassStatus.screenShare ? 'Sharing' : 'Ready'}</span>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3">
-              <button 
-                onClick={handleToggleFullscreen}
-                className="p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
-              >
-                {liveClassStatus.isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
-              </button>
-              <div>
-                <p className="text-sm opacity-90">Fullscreen</p>
-                <span className="font-semibold">{liveClassStatus.isFullscreen ? 'On' : 'Off'}</span>
-              </div>
-            </div>
+      </div>
+      <div className="p-4 bg-gray-50 rounded-lg">
+        <div className="flex items-center space-x-3">
+          <Clock className="text-green-600" size={24} />
+          <div>
+            <h3 className="font-semibold">Duration</h3>
+            <p className="text-sm text-gray-600">In progress</p>
           </div>
         </div>
-      )} */}
+      </div>
+      <div className="p-4 bg-gray-50 rounded-lg">
+        <div className="flex items-center space-x-3">
+          <Video className="text-blue-600" size={24} />
+          <div>
+            <h3 className="font-semibold">Room ID</h3>
+            <p className="text-sm text-gray-600 font-mono">{currentRoomID.slice(-8)}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
+
 
       {/* Tabs and Filters */}
       <div className="bg-white rounded-2xl shadow-sm p-6">
