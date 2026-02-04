@@ -1,7 +1,9 @@
+// LectureManagementContent.js
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
 import { initializeZegoCloud, leaveRoom, generateRoomID, generateUserID } from '@/utils/zegocloud';
+import { api } from '@/services/api';
 import { 
   Upload, 
   Video, 
@@ -63,12 +65,17 @@ export default function LectureManagementContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedSession, setExpandedSession] = useState(null);
   
+  // API Data States
+  const [liveSessions, setLiveSessions] = useState([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [error, setError] = useState('');
+  
   // ZEGOCLOUD state
-const [zegoInstance, setZegoInstance] = useState(null);
-const [currentRoomID, setCurrentRoomID] = useState('');
-const [currentUserID, setCurrentUserID] = useState('');
-const [showVideoCall, setShowVideoCall] = useState(false);
-const meetingContainerRef = useRef(null);
+  const [zegoInstance, setZegoInstance] = useState(null);
+  const [currentRoomID, setCurrentRoomID] = useState('');
+  const [currentUserID, setCurrentUserID] = useState('');
+  const [showVideoCall, setShowVideoCall] = useState(false);
+  const meetingContainerRef = useRef(null);
 
   // Materials state
   const [materials, setMaterials] = useState([
@@ -130,54 +137,8 @@ const meetingContainerRef = useRef(null);
     },
   ]);
 
-  // Sessions state
-  const [sessions, setSessions] = useState([
-    {
-      id: 1,
-      title: 'Advanced JavaScript Concepts',
-      course: 'Web App Development',
-      scheduled: 'Today, 10:00 AM',
-      duration: '2 hours',
-      students: 45,
-      status: 'upcoming',
-      joinLink: 'https://meet.example.com/abc123',
-      description: 'Deep dive into advanced JavaScript concepts including closures, prototypes, and async/await',
-      recording: true,
-      materials: ['slides', 'code-examples'],
-      password: 'js2025',
-      instructor: 'Dr. Sarah Johnson'
-    },
-    {
-      id: 2,
-      title: 'CSS Grid Masterclass',
-      course: 'Web App Development',
-      scheduled: 'Tomorrow, 2:00 PM',
-      duration: '1.5 hours',
-      students: 32,
-      status: 'scheduled',
-      joinLink: 'https://meet.example.com/def456',
-      description: 'Complete guide to CSS Grid layout with practical examples',
-      recording: true,
-      materials: ['slides', 'cheatsheet'],
-      password: 'cssgrid',
-      instructor: 'Prof. Michael Chen'
-    },
-    {
-      id: 3,
-      title: 'State Management Patterns',
-      course: 'React Masterclass',
-      scheduled: 'Wednesday, 11:00 AM',
-      duration: '2 hours',
-      students: 28,
-      status: 'scheduled',
-      joinLink: 'https://meet.example.com/ghi789',
-      description: 'Exploring different state management patterns in modern React applications',
-      recording: true,
-      materials: ['slides', 'demo-project'],
-      password: 'react2025',
-      instructor: 'Dr. Alex Rodriguez'
-    },
-  ]);
+  // Sessions state - Now using API data
+  const [sessions, setSessions] = useState([]);
 
   // Recordings state
   const [recordings, setRecordings] = useState([
@@ -317,7 +278,19 @@ const meetingContainerRef = useRef(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [showMaterialsModal, setShowMaterialsModal] = useState(false);
   const [showReminderModal, setShowReminderModal] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
   
+  // Schedule form state
+  const [scheduleForm, setScheduleForm] = useState({
+    schedule_id: '',
+    title: '',
+    link: '',
+    session_password: '',
+    instructions: '',
+    duration: '',
+    schedule_time: ''
+  });
+
   // Recording settings
   const [recordingSettings, setRecordingSettings] = useState({
     recordAll: true,
@@ -334,7 +307,7 @@ const meetingContainerRef = useRef(null);
     autoPublish: false
   });
 
-  // Live session state - UPDATED TO MATCH FIRST CODE STYLE
+  // Live session state
   const [liveClassStatus, setLiveClassStatus] = useState({
     isJoined: false,
     isFullscreen: false,
@@ -372,6 +345,129 @@ const meetingContainerRef = useRef(null);
     { id: 'cs301', name: 'React Masterclass' },
     { id: 'cs401', name: 'Full Stack Development' },
   ];
+
+  // Fetch live sessions from API
+  useEffect(() => {
+    const fetchLiveSessions = async () => {
+      setLoadingSessions(true);
+      setError('');
+      try {
+        const response = await api.get('/live-sessions');
+        
+        if (response.status === 200 && response.data?.data) {
+          const apiSessions = response.data.data.map(session => ({
+            id: session._id,
+            title: session.title,
+            course: 'Web App Development', // You might want to fetch course name from schedule_id
+            scheduled: new Date(session.schedule_time).toLocaleString('en-US', { 
+              weekday: 'long', 
+              month: 'short', 
+              day: 'numeric', 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            }),
+            schedule_time: session.schedule_time,
+            duration: session.duration,
+            students: 0,
+            status: new Date(session.schedule_time) > new Date() ? 'scheduled' : 'completed',
+            joinLink: session.link,
+            description: session.instructions,
+            recording: true,
+            materials: [],
+            password: session.session_password,
+            instructor: 'You',
+            schedule_id: session.schedule_id,
+            room_id: session.room_id,
+            rawData: session
+          }));
+          
+          setLiveSessions(apiSessions);
+          setSessions(apiSessions);
+        }
+      } catch (err) {
+        console.error('Error fetching live sessions:', err);
+        setError('Failed to load live sessions. Please try again.');
+      } finally {
+        setLoadingSessions(false);
+      }
+    };
+
+    if (activeTab === 'live') {
+      fetchLiveSessions();
+    }
+  }, [activeTab]);
+
+  // Update session status to "upcoming" for sessions scheduled today
+  useEffect(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    setSessions(prev => prev.map(session => {
+      const sessionDate = new Date(session.schedule_time);
+      if (sessionDate >= today && sessionDate < tomorrow) {
+        return { ...session, status: 'upcoming' };
+      }
+      return session;
+    }));
+  }, [sessions]);
+
+
+  // API Function: Schedule New Live Session
+  const scheduleLiveSession = async (sessionData) => {
+    try {
+      const payload = {
+        schedule_id: sessionData.schedule_id,
+        title: sessionData.title,
+        link: sessionData.link,
+        session_password: sessionData.session_password,
+        instructions: sessionData.instructions,
+        duration: sessionData.duration,
+        schedule_time: sessionData.schedule_time
+      };
+
+      const response = await api.post('/live-sessions', payload);
+      
+      if (response.status === 200 || response.status === 201) {
+        // Add the new session to state
+        const newSession = {
+          id: response.data?._id || Date.now().toString(),
+          title: sessionData.title,
+          course: 'Web App Development',
+          scheduled: new Date(sessionData.schedule_time).toLocaleString('en-US', { 
+            weekday: 'long', 
+            month: 'short', 
+            day: 'numeric', 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          }),
+          schedule_time: sessionData.schedule_time,
+          duration: sessionData.duration,
+          students: 0,
+          status: 'scheduled',
+          joinLink: sessionData.link,
+          description: sessionData.instructions,
+          recording: true,
+          materials: [],
+          password: sessionData.session_password,
+          instructor: 'You',
+          schedule_id: sessionData.schedule_id,
+          rawData: response.data
+        };
+        
+        setSessions(prev => [newSession, ...prev]);
+        setLiveSessions(prev => [newSession, ...prev]);
+        return response.data;
+      } else {
+        throw new Error(response.message || 'Failed to schedule session');
+      }
+    } catch (err) {
+      console.error('Error scheduling session:', err);
+      throw err;
+    }
+  };
 
   // File upload handler
   const handleFileUpload = (e) => {
@@ -420,17 +516,32 @@ const meetingContainerRef = useRef(null);
     }
   };
 
-  // Live session handlers - UPDATED TO MATCH FIRST CODE STYLE
-const startLiveSession = async () => {
+const startLiveSession = async (session = null) => {
   try {
     const roomID = generateRoomID();
     const userID = generateUserID();
+    const sessionId = session?.id || Date.now().toString();
+    
+    // Store the current session if provided
+    if (session) {
+      setSelectedSession(session);
+    }
     
     setCurrentRoomID(roomID);
     setCurrentUserID(userID);
     setIsLive(true);
     setShowVideoCall(true);
     setLiveClassStatus(prev => ({ ...prev, participants: 1, isJoined: true }));
+    
+    // Update session status to "start" via API if it's a scheduled session
+    if (session?.id) {
+      try {
+        await updateSessionStatus(session.id, roomID, 'start');
+      } catch (apiError) {
+        console.warn('Failed to update API session status:', apiError);
+        // Continue with local session even if API fails
+      }
+    }
     
     // Wait for the container to be rendered
     setTimeout(async () => {
@@ -451,7 +562,7 @@ const startLiveSession = async () => {
                 console.log('Instructor joined the room');
               },
               onLeaveRoom: () => {
-                handleLeaveClass();
+                handleLeaveClass(session);
               },
               onUserJoin: (users) => {
                 setLiveClassStatus(prev => ({
@@ -474,6 +585,7 @@ const startLiveSession = async () => {
           alert('Failed to start video call. Please check your ZEGOCLOUD credentials in .env.local');
           setIsLive(false);
           setShowVideoCall(false);
+          setSelectedSession(null);
         }
       }
     }, 100);
@@ -481,6 +593,7 @@ const startLiveSession = async () => {
   } catch (error) {
     console.error('Error starting live session:', error);
     alert('Failed to start live session: ' + error.message);
+    setSelectedSession(null);
   }
 };
 
@@ -489,9 +602,16 @@ const startLiveSession = async () => {
     setShowJoinModal(true);
   };
 
-const handleLeaveClass = () => {
+const handleLeaveClass = async (session = null) => {
+  // Use selectedSession if no session is passed
+  const sessionToUse = session || selectedSession;
+  
   if (zegoInstance) {
-    leaveRoom(zegoInstance);
+    try {
+      leaveRoom(zegoInstance);
+    } catch (error) {
+      console.warn('Error leaving room:', error);
+    }
     setZegoInstance(null);
   }
   
@@ -499,11 +619,26 @@ const handleLeaveClass = () => {
   setShowVideoCall(false);
   setIsLive(false);
   
+  // Update session status to "stop" via API if it was a scheduled session
+  if (sessionToUse?.id && currentRoomID) {
+    try {
+      const result = await updateSessionStatus(sessionToUse.id, currentRoomID, 'stop');
+      if (!result) {
+        console.warn('Session status update returned null');
+      }
+    } catch (apiError) {
+      console.warn('Failed to update API session status:', apiError);
+      // Continue even if API fails
+    }
+  } else {
+    console.log('No session ID or room ID available for status update');
+  }
+  
   // Create recording
   const newRecordingId = recordings.length > 0 ? Math.max(...recordings.map(r => r.id)) + 1 : 1;
   const newRecording = {
     id: newRecordingId,
-    title: `Live Session ${new Date().toLocaleDateString()}`,
+    title: sessionToUse?.title || `Live Session ${new Date().toLocaleDateString()}`,
     course: 'Web App Development',
     date: new Date().toLocaleDateString('en-US', { 
       month: 'short', 
@@ -534,8 +669,29 @@ const handleLeaveClass = () => {
   };
   
   setRecordings(prev => [newRecording, ...prev]);
+  
+  // Clear selected session
+  setSelectedSession(null);
+  
   alert('Live session ended and recorded!');
 };
+
+useEffect(() => {
+  return () => {
+    // Clean up when component unmounts
+    if (zegoInstance) {
+      leaveRoom(zegoInstance);
+    }
+    setSelectedSession(null);
+  };
+}, [zegoInstance]);
+
+// Also clear selectedSession when switching tabs
+useEffect(() => {
+  if (activeTab !== 'live' && !isLive) {
+    setSelectedSession(null);
+  }
+}, [activeTab, isLive]);
 
   const handleToggleFullscreen = () => {
     setLiveClassStatus(prev => ({ ...prev, isFullscreen: !prev.isFullscreen }));
@@ -561,15 +717,24 @@ const handleLeaveClass = () => {
     setLiveClassStatus(prev => ({ ...prev, screenShare: !prev.screenShare }));
   };
 
-  const stopLiveSession = () => {
+  const stopLiveSession = async (session = null) => {
     setIsLive(false);
     setLiveClassStatus(prev => ({ ...prev, isJoined: false }));
+    
+    // Update session status via API
+    if (session?.id) {
+      try {
+        await updateSessionStatus(session.id, currentRoomID, 'stop');
+      } catch (apiError) {
+        console.warn('Failed to update API session status:', apiError);
+      }
+    }
     
     // Create a new recording from the live session
     const newRecordingId = recordings.length > 0 ? Math.max(...recordings.map(r => r.id)) + 1 : 1;
     const newRecording = {
       id: newRecordingId,
-      title: `Live Session ${new Date().toLocaleDateString()}`,
+      title: session?.title || `Live Session ${new Date().toLocaleDateString()}`,
       course: 'Web App Development',
       date: new Date().toLocaleDateString('en-US', { 
         month: 'short', 
@@ -613,12 +778,12 @@ const handleLeaveClass = () => {
   };
 
   useEffect(() => {
-  return () => {
-    if (zegoInstance) {
-      leaveRoom(zegoInstance);
-    }
-  };
-}, [zegoInstance]);
+    return () => {
+      if (zegoInstance) {
+        leaveRoom(zegoInstance);
+      }
+    };
+  }, [zegoInstance]);
 
   const handleEditMaterial = (material) => {
     setSelectedMaterial(material);
@@ -667,36 +832,31 @@ const handleLeaveClass = () => {
 
   // Session handlers
   const handleScheduleLive = () => {
-    const date = prompt('Enter session date and time (YYYY-MM-DD HH:MM):');
-    const topic = prompt('Enter session topic:');
-    const course = prompt('Enter course:');
+    setShowScheduleModal(true);
+  };
+
+  const handleSubmitSchedule = async (e) => {
+    e.preventDefault();
     
-    if (date && topic && course) {
-      const newId = sessions.length > 0 ? Math.max(...sessions.map(s => s.id)) + 1 : 1;
-      const newSession = {
-        id: newId,
-        title: topic,
-        course: course,
-        scheduled: new Date(date).toLocaleString('en-US', { 
-          weekday: 'long', 
-          month: 'short', 
-          day: 'numeric', 
-          hour: '2-digit', 
-          minute: '2-digit' 
-        }),
-        duration: '2 hours',
-        students: 0,
-        status: 'scheduled',
-        joinLink: `https://meet.example.com/${Math.random().toString(36).substr(2, 9)}`,
-        description: '',
-        recording: true,
-        materials: [],
-        password: Math.random().toString(36).substr(2, 6),
-        instructor: 'You'
-      };
+    try {
+      await scheduleLiveSession(scheduleForm);
       
-      setSessions(prev => [newSession, ...prev]);
-      alert(`Live session scheduled for ${date} on "${topic}"`);
+      alert(`Live session "${scheduleForm.title}" scheduled successfully!`);
+      
+      // Reset form
+      setScheduleForm({
+        schedule_id: '',
+        title: '',
+        link: '',
+        session_password: '',
+        instructions: '',
+        duration: '',
+        schedule_time: ''
+      });
+      
+      setShowScheduleModal(false);
+    } catch (err) {
+      alert(`Failed to schedule session: ${err.message}`);
     }
   };
 
@@ -726,7 +886,8 @@ const handleLeaveClass = () => {
 const handleStartSession = async (sessionId) => {
   const session = sessions.find(s => s.id === sessionId);
   if (session) {
-    await startLiveSession();
+    setSelectedSession(session); // Set the selected session
+    await startLiveSession(session);
   }
 };
 
@@ -899,6 +1060,35 @@ const handleStartSession = async (sessionId) => {
     }
   };
 
+// API Function: Start/Stop Live Session
+const updateSessionStatus = async (sessionId, roomId, action) => {
+  try {
+    // Check if we have valid parameters
+    if (!sessionId || !roomId || !action) {
+      console.warn('Missing parameters for session status update');
+      return null;
+    }
+
+    const payload = {
+      action: action,
+      session_id: sessionId,
+      room_id: roomId
+    };
+
+    const response = await api.post('/live-sessions/status', payload);
+    
+    if (response.status === 200) {
+      return response.data;
+    } else {
+      throw new Error(response.message || 'Failed to update session status');
+    }
+  } catch (err) {
+    console.error(`Error ${action}ing session:`, err);
+    // Return null instead of throwing to prevent breaking the flow
+    return null;
+  }
+};
+
   // Editor functions
   const handleAddChapter = () => {
     if (currentTime > 0 && captionText.trim()) {
@@ -1018,6 +1208,137 @@ const handleStartSession = async (sessionId) => {
     if (filters.status !== 'all' && recording.status !== filters.status) return false;
     return true;
   });
+
+  // Schedule Modal Component
+  const ScheduleModal = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl p-6 max-w-md w-full">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-xl font-bold text-gray-800">Schedule Live Session</h3>
+          <button
+            onClick={() => setShowScheduleModal(false)}
+            className="p-2 hover:bg-gray-100 rounded-lg"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmitSchedule} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Schedule ID
+            </label>
+            <input
+              type="text"
+              value={scheduleForm.schedule_id}
+              onChange={(e) => setScheduleForm(prev => ({ ...prev, schedule_id: e.target.value }))}
+              placeholder="Enter schedule ID"
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-dark focus:border-transparent"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Session Title
+            </label>
+            <input
+              type="text"
+              value={scheduleForm.title}
+              onChange={(e) => setScheduleForm(prev => ({ ...prev, title: e.target.value }))}
+              placeholder="Enter session title"
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-dark focus:border-transparent"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Meeting Link
+            </label>
+            <input
+              type="url"
+              value={scheduleForm.link}
+              onChange={(e) => setScheduleForm(prev => ({ ...prev, link: e.target.value }))}
+              placeholder="https://zoom.us/j/1234567890"
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-dark focus:border-transparent"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Session Password
+            </label>
+            <input
+              type="text"
+              value={scheduleForm.session_password}
+              onChange={(e) => setScheduleForm(prev => ({ ...prev, session_password: e.target.value }))}
+              placeholder="Enter session password"
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-dark focus:border-transparent"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Instructions
+            </label>
+            <textarea
+              value={scheduleForm.instructions}
+              onChange={(e) => setScheduleForm(prev => ({ ...prev, instructions: e.target.value }))}
+              placeholder="Enter session instructions"
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-dark focus:border-transparent"
+              rows="3"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Duration
+            </label>
+            <input
+              type="text"
+              value={scheduleForm.duration}
+              onChange={(e) => setScheduleForm(prev => ({ ...prev, duration: e.target.value }))}
+              placeholder="e.g., 60 minutes"
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-dark focus:border-transparent"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Schedule Time
+            </label>
+            <input
+              type="datetime-local"
+              value={scheduleForm.schedule_time}
+              onChange={(e) => setScheduleForm(prev => ({ ...prev, schedule_time: e.target.value }))}
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-dark focus:border-transparent"
+              required
+            />
+          </div>
+
+          <div className="flex justify-end space-x-3 mt-6">
+            <button
+              type="button"
+              onClick={() => setShowScheduleModal(false)}
+              className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-primary-dark hover:bg-primary-light text-white rounded-lg transition-colors"
+            >
+              Schedule Session
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 
   // Editor Component
   const EditorModal = () => (
@@ -1323,14 +1644,14 @@ const handleStartSession = async (sessionId) => {
             <p className="text-primary-lighter">Upload materials, conduct live sessions, and manage recordings</p>
           </div>
           <div className="mt-4 md:mt-0 flex items-center space-x-3">
-            <button
-              onClick={startLiveSession}
+            {/* <button
+              onClick={() => startLiveSession()}
               disabled={isLive}
               className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
             >
               <PlayCircle size={20} />
               <span>{isLive ? 'Live Now' : 'Start Live Session'}</span>
-            </button>
+            </button> */}
             <button
               onClick={handleScheduleLive}
               className="px-6 py-3 border-2 border-white text-white hover:bg-white/10 font-semibold rounded-lg transition-colors flex items-center space-x-2"
@@ -1342,66 +1663,64 @@ const handleStartSession = async (sessionId) => {
         </div>
       </div>
 
-      {/* Live Class Now Section - UPDATED TO MATCH FIRST CODE STYLE */}
-{isLive && showVideoCall && (
-  <div className="bg-white rounded-2xl shadow-sm p-6">
-    <div className="flex items-center justify-between mb-6">
-      <h2 className="text-xl font-bold text-gray-800">Live Class Now</h2>
-      <div className="flex items-center space-x-4">
-        <div className="flex items-center space-x-2 text-red-600">
-          <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></div>
-          <span className="font-semibold">LIVE NOW</span>
-        </div>
-        <button 
-          onClick={handleLeaveClass}
-          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors"
-        >
-          End Session
-        </button>
-      </div>
-    </div>
-    
-    {/* ZEGOCLOUD Video Container */}
-    <div 
-      ref={meetingContainerRef} 
-      className="w-full rounded-xl overflow-hidden bg-gray-900"
-      style={{ height: '600px' }}
-    />
-    
-    {/* Session Info */}
-    <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div className="p-4 bg-gray-50 rounded-lg">
-        <div className="flex items-center space-x-3">
-          <Users className="text-purple-600" size={24} />
-          <div>
-            <h3 className="font-semibold">Participants</h3>
-            <p className="text-sm text-gray-600">{liveClassStatus.participants} online</p>
+      {/* Live Class Now Section */}
+      {isLive && showVideoCall && (
+        <div className="bg-white rounded-2xl shadow-sm p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-gray-800">Live Class Now</h2>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2 text-red-600">
+                <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></div>
+                <span className="font-semibold">LIVE NOW</span>
+              </div>
+              <button 
+                onClick={() => handleLeaveClass()}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors"
+              >
+                End Session
+              </button>
+            </div>
+          </div>
+          
+          {/* ZEGOCLOUD Video Container */}
+          <div 
+            ref={meetingContainerRef} 
+            className="w-full rounded-xl overflow-hidden bg-gray-900"
+            style={{ height: '600px' }}
+          />
+          
+          {/* Session Info */}
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center space-x-3">
+                <Users className="text-purple-600" size={24} />
+                <div>
+                  <h3 className="font-semibold">Participants</h3>
+                  <p className="text-sm text-gray-600">{liveClassStatus.participants} online</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center space-x-3">
+                <Clock className="text-green-600" size={24} />
+                <div>
+                  <h3 className="font-semibold">Duration</h3>
+                  <p className="text-sm text-gray-600">In progress</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center space-x-3">
+                <Video className="text-blue-600" size={24} />
+                <div>
+                  <h3 className="font-semibold">Room ID</h3>
+                  <p className="text-sm text-gray-600 font-mono">{currentRoomID.slice(-8)}</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-      <div className="p-4 bg-gray-50 rounded-lg">
-        <div className="flex items-center space-x-3">
-          <Clock className="text-green-600" size={24} />
-          <div>
-            <h3 className="font-semibold">Duration</h3>
-            <p className="text-sm text-gray-600">In progress</p>
-          </div>
-        </div>
-      </div>
-      <div className="p-4 bg-gray-50 rounded-lg">
-        <div className="flex items-center space-x-3">
-          <Video className="text-blue-600" size={24} />
-          <div>
-            <h3 className="font-semibold">Room ID</h3>
-            <p className="text-sm text-gray-600 font-mono">{currentRoomID.slice(-8)}</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
-
-
+      )}
 
       {/* Tabs and Filters */}
       <div className="bg-white rounded-2xl shadow-sm p-6">
@@ -1490,6 +1809,16 @@ const handleStartSession = async (sessionId) => {
                 className="bg-primary-dark h-2 rounded-full transition-all duration-300"
                 style={{ width: `${uploadProgress}%` }}
               ></div>
+            </div>
+          </div>
+        )}
+
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center space-x-2">
+              <AlertCircle className="text-red-500" size={20} />
+              <span className="text-red-700">{error}</span>
             </div>
           </div>
         )}
@@ -1602,153 +1931,199 @@ const handleStartSession = async (sessionId) => {
         {/* Live Sessions Tab */}
         {activeTab === 'live' && (
           <div className="space-y-4">
-            {filteredSessions.map((session) => (
-              <div key={session.id} className="border border-gray-200 rounded-xl p-6 hover:border-primary-light transition-colors bg-white">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <h3 className="font-bold text-gray-800 text-lg">{session.title}</h3>
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        session.status === 'upcoming' ? 'bg-red-100 text-red-800' :
-                        session.status === 'scheduled' ? 'bg-blue-100 text-blue-800' :
-                        'bg-green-100 text-green-800'
-                      }`}>
-                        {session.status}
-                      </span>
+            {loadingSessions ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-dark mx-auto mb-4"></div>
+                <p className="text-gray-600">Loading live sessions...</p>
+              </div>
+            ) : filteredSessions.length === 0 ? (
+              <div className="text-center py-8">
+                <Calendar className="mx-auto text-gray-400 mb-4" size={48} />
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">No Live Sessions</h3>
+                <p className="text-gray-600 mb-4">You haven't scheduled any live sessions yet.</p>
+                <button
+                  onClick={handleScheduleLive}
+                  className="px-6 py-3 bg-primary-dark hover:bg-primary-light text-white font-semibold rounded-lg transition-colors"
+                >
+                  Schedule Your First Session
+                </button>
+              </div>
+            ) : (
+              filteredSessions.map((session) => (
+                <div key={session.id} className="border border-gray-200 rounded-xl p-6 hover:border-primary-light transition-colors bg-white">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <h3 className="font-bold text-gray-800 text-lg">{session.title}</h3>
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          session.status === 'upcoming' ? 'bg-red-100 text-red-800' :
+                          session.status === 'scheduled' ? 'bg-blue-100 text-blue-800' :
+                          'bg-green-100 text-green-800'
+                        }`}>
+                          {session.status}
+                        </span>
+                      </div>
+                      <p className="text-gray-600 mb-2">{session.course}</p>
+                      {session.description && (
+                        <p className="text-sm text-gray-500">{session.description}</p>
+                      )}
                     </div>
-                    <p className="text-gray-600 mb-2">{session.course}</p>
-                    {session.description && (
-                      <p className="text-sm text-gray-500">{session.description}</p>
+                    <div className="flex items-center space-x-2">
+                      <button 
+                        onClick={() => handleEditSession(session)}
+                        className="p-2 text-gray-400 hover:text-primary-dark rounded-lg hover:bg-blue-50"
+                        title="Edit Session"
+                      >
+                        <Edit size={16} />
+                      </button>
+                      <button 
+                        onClick={() => handleCopyLink(session.joinLink)}
+                        className="p-2 text-gray-400 hover:text-green-600 rounded-lg hover:bg-green-50"
+                        title="Copy Join Link"
+                      >
+                        <Copy size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setExpandedSession(expandedSession === session.id ? null : session.id)}
+                    className="flex items-center text-primary-dark hover:text-blue-800 text-sm mb-4"
+                  >
+                    {expandedSession === session.id ? (
+                      <>
+                        <ChevronUp size={16} className="mr-1" />
+                        Show Less
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown size={16} className="mr-1" />
+                        Show Details
+                      </>
+                    )}
+                  </button>
+
+                  {expandedSession === session.id && (
+                    <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <h4 className="font-medium text-gray-700 mb-2">Session Details</h4>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Session Password:</span>
+                              <span className="font-mono font-medium">{session.password}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Auto-Recording:</span>
+                              <span className={`font-medium ${session.recording ? 'text-green-600' : 'text-gray-600'}`}>
+                                {session.recording ? 'Enabled' : 'Disabled'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Room ID:</span>
+                              <span className="font-mono font-medium">{session.room_id || 'Not assigned'}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Schedule ID:</span>
+                              <span className="font-mono font-medium">{session.schedule_id}</span>
+                            </div>
+                            {session.materials && session.materials.length > 0 && (
+                              <div>
+                                <span className="text-gray-600">Materials:</span>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {session.materials.map((material, idx) => (
+                                    <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                                      {material}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          <h4 className="font-medium text-gray-700 mb-2">Join Instructions</h4>
+                          <div className="text-sm text-gray-600 space-y-2">
+                            <p>1. Click the "Copy Link" button to copy the join link</p>
+                            <p>2. Share the link with your students</p>
+                            <p>3. Use the password: <span className="font-mono font-medium">{session.password}</span></p>
+                            <p>4. Start the session 5 minutes before the scheduled time</p>
+                            {session.instructions && (
+                              <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded">
+                                <p className="text-sm font-medium text-yellow-800">Additional Instructions:</p>
+                                <p className="text-xs text-yellow-700">{session.instructions}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-600">Scheduled Time</p>
+                      <p className="font-semibold">{session.scheduled}</p>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-600">Duration</p>
+                      <p className="font-semibold">{session.duration}</p>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-600">Students</p>
+                      <p className="font-semibold">{session.students}</p>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-600">Join Link</p>
+                      <button
+                        onClick={() => handleCopyLink(session.joinLink)}
+                        className="text-primary-dark hover:text-blue-800 font-medium flex items-center text-sm"
+                      >
+                        <Copy size={14} className="mr-1" />
+                        Copy Link
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    {session.status === 'upcoming' && (
+                      <button 
+                        onClick={() => handleStartSession(session.id)}
+                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg flex items-center space-x-2 transition-colors"
+                      >
+                        <PlayCircle size={16} />
+                        <span>Start Session</span>
+                      </button>
+                    )}
+                    <button 
+                      onClick={() => handleShareLink(session.joinLink)}
+                      className="px-4 py-2 border border-primary-dark text-primary-dark hover:bg-blue-50 font-semibold rounded-lg flex items-center space-x-2 transition-colors"
+                    >
+                      <Share size={16} />
+                      <span>Share Link</span>
+                    </button>
+                    {session.status === 'scheduled' && (
+                      <button 
+                        onClick={() => handleSetReminder(session)}
+                        className="px-4 py-2 bg-red-100 text-red-600 hover:bg-red-200 font-semibold rounded-lg flex items-center space-x-2"
+                      >
+                        <Bell size={16} />
+                        <span>Set Reminder</span>
+                      </button>
+                    )}
+                    {session.status === 'scheduled' && (
+                      <button 
+                        onClick={() => handleRescheduleSession(session.id)}
+                        className="px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 font-semibold rounded-lg flex items-center space-x-2"
+                      >
+                        <Calendar size={16} />
+                        <span>Reschedule</span>
+                      </button>
                     )}
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <button 
-                      onClick={() => handleEditSession(session)}
-                      className="p-2 text-gray-400 hover:text-primary-dark rounded-lg hover:bg-blue-50"
-                      title="Edit Session"
-                    >
-                      <Edit size={16} />
-                    </button>
-                    <button 
-                      onClick={() => handleCopyLink(session.joinLink)}
-                      className="p-2 text-gray-400 hover:text-green-600 rounded-lg hover:bg-green-50"
-                      title="Copy Join Link"
-                    >
-                      <Copy size={16} />
-                    </button>
-                  </div>
                 </div>
-
-                <button
-                  onClick={() => setExpandedSession(expandedSession === session.id ? null : session.id)}
-                  className="flex items-center text-primary-dark hover:text-blue-800 text-sm mb-4"
-                >
-                  {expandedSession === session.id ? (
-                    <>
-                      <ChevronUp size={16} className="mr-1" />
-                      Show Less
-                    </>
-                  ) : (
-                    <>
-                      <ChevronDown size={16} className="mr-1" />
-                      Show Details
-                    </>
-                  )}
-                </button>
-
-                {expandedSession === session.id && (
-                  <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <h4 className="font-medium text-gray-700 mb-2">Session Details</h4>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Session Password:</span>
-                            <span className="font-mono font-medium">{session.password}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Auto-Recording:</span>
-                            <span className={`font-medium ${session.recording ? 'text-green-600' : 'text-gray-600'}`}>
-                              {session.recording ? 'Enabled' : 'Disabled'}
-                            </span>
-                          </div>
-                          {session.materials && session.materials.length > 0 && (
-                            <div>
-                              <span className="text-gray-600">Materials:</span>
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {session.materials.map((material, idx) => (
-                                  <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
-                                    {material}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <h4 className="font-medium text-gray-700 mb-2">Join Instructions</h4>
-                        <div className="text-sm text-gray-600 space-y-2">
-                          <p>1. Click the "Copy Link" button to copy the join link</p>
-                          <p>2. Share the link with your students</p>
-                          <p>3. Use the password: <span className="font-mono font-medium">{session.password}</span></p>
-                          <p>4. Start the session 5 minutes before the scheduled time</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <p className="text-sm text-gray-600">Scheduled Time</p>
-                    <p className="font-semibold">{session.scheduled}</p>
-                  </div>
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <p className="text-sm text-gray-600">Duration</p>
-                    <p className="font-semibold">{session.duration}</p>
-                  </div>
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <p className="text-sm text-gray-600">Students</p>
-                    <p className="font-semibold">{session.students}</p>
-                  </div>
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <p className="text-sm text-gray-600">Join Link</p>
-                    <button
-                      onClick={() => handleCopyLink(session.joinLink)}
-                      className="text-primary-dark hover:text-blue-800 font-medium flex items-center text-sm"
-                    >
-                      <Copy size={14} className="mr-1" />
-                      Copy Link
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-3">
-                  <button 
-                    onClick={() => handleStartSession(session.id)}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg flex items-center space-x-2 transition-colors"
-                  >
-                    <PlayCircle size={16} />
-                    <span>Start Session</span>
-                  </button>
-                  <button 
-                    onClick={() => handleShareLink(session.joinLink)}
-                    className="px-4 py-2 border border-primary-dark text-primary-dark hover:bg-blue-50 font-semibold rounded-lg flex items-center space-x-2 transition-colors"
-                  >
-                    <Share size={16} />
-                    <span>Share Link</span>
-                  </button>
-                  <button 
-                    onClick={() => handleSetReminder(session)}
-                    className="px-4 py-2 bg-red-100 text-red-600 hover:bg-red-200 font-semibold rounded-lg flex items-center space-x-2"
-                  >
-                    <Bell size={16} />
-                    <span>Set Reminder</span>
-                  </button>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         )}
 
@@ -2242,6 +2617,9 @@ const handleStartSession = async (sessionId) => {
           </div>
         </div>
       )}
+
+      {/* Schedule Modal */}
+      {showScheduleModal && <ScheduleModal />}
 
       {/* Join Class Modal */}
       {showJoinModal && (
