@@ -26,23 +26,72 @@ import {
   Save,
   Send,
   CheckSquare,
-  FileCheck
+  FileCheck,
+  ChevronLeft,
+  ChevronRight as ChevronRightIcon
 } from 'lucide-react';
+import { api } from '@/services/api';
+
+// Simple toast component
+const Toast = ({ message, type = 'success', onClose }) => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 3000);
+    
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const bgColor = type === 'success' ? 'bg-green-100 border-green-200 text-green-800' 
+                : type === 'error' ? 'bg-red-100 border-red-200 text-red-800'
+                : 'bg-blue-100 border-blue-200 text-blue-800';
+
+  const icon = type === 'success' ? '✓' 
+             : type === 'error' ? '✗'
+             : 'ℹ';
+
+  return (
+    <div className={`fixed top-4 right-4 z-50 p-4 border rounded-lg shadow-lg ${bgColor} flex items-center space-x-2 animate-slide-in`}>
+      <span className="font-bold">{icon}</span>
+      <span>{message}</span>
+    </div>
+  );
+};
 
 export default function AttendanceContent() {
-  const [selectedCourse, setSelectedCourse] = useState('cs101');
+  const [selectedCourse, setSelectedCourse] = useState('all');
   const [selectedSession, setSelectedSession] = useState('all');
   const [attendanceData, setAttendanceData] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [selectedClass, setSelectedClass] = useState(null);
-  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
-  const [draftSaved, setDraftSaved] = useState(false);
-  const [draftId, setDraftId] = useState(null);
+  
+  // Toast state
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  
+  // Stats state
+  const [stats, setStats] = useState({
+    date: '',
+    total_students: 0,
+    present_today: 0,
+    absent_today: 0,
+    avg_attendance: 0
+  });
+
+  const [loading, setLoading] = useState({
+    stats: true,
+    attendance: true
+  });
 
   const courses = [
+    { id: 'all', name: 'All Courses', students: 0 },
     { id: 'cs101', name: 'Web App Development', students: 45 },
     { id: 'cs201', name: 'Advanced JavaScript', students: 32 },
     { id: 'cs301', name: 'React Masterclass', students: 28 },
@@ -55,50 +104,113 @@ export default function AttendanceContent() {
     { id: 'session3', name: 'Dec 6 - HTML Fundamentals' },
   ];
 
-  // Initialize attendance data
+  // Show toast function
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+  };
+
+  // Fetch attendance stats
   useEffect(() => {
-    const generateAttendanceData = () => {
-      const students = [];
-      const course = courses.find(c => c.id === selectedCourse);
+    fetchAttendanceStats();
+  }, []);
+
+  // Fetch attendance records
+  useEffect(() => {
+    fetchAttendanceRecords();
+  }, [selectedCourse, selectedSession, currentPage, itemsPerPage]);
+
+  const fetchAttendanceStats = async () => {
+    try {
+      setLoading(prev => ({ ...prev, stats: true }));
+      const response = await api.get('/attendance/stats');
       
-      for (let i = 1; i <= (course?.students || 30); i++) {
-        students.push({
-          id: i,
-          name: `Student ${i}`,
-          studentId: `STU2025${String(i).padStart(3, '0')}`,
-          email: `student${i}@example.com`,
-          attendance: Math.floor(Math.random() * 100),
-          present: Math.random() > 0.2,
-          late: Math.random() > 0.7,
-          lastSession: Math.random() > 0.3 ? 'Present' : 'Absent',
-          notes: '',
-        });
+      if (response.status === 200 && response.data?.data) {
+        setStats(response.data.data);
       }
-      
-      setAttendanceData(students);
-      // Check for existing draft
-      checkForSavedDraft();
-    };
-
-    generateAttendanceData();
-  }, [selectedCourse]);
-
-  const checkForSavedDraft = () => {
-    const savedDraft = localStorage.getItem(`attendance_draft_${selectedCourse}`);
-    if (savedDraft) {
-      const draft = JSON.parse(savedDraft);
-      setAttendanceData(draft.data);
-      setDraftId(draft.id);
-      setDraftSaved(true);
+    } catch (err) {
+      console.error('Error fetching attendance stats:', err);
+      showToast('Failed to load attendance statistics', 'error');
+    } finally {
+      setLoading(prev => ({ ...prev, stats: false }));
     }
   };
 
-  const showSuccess = (message) => {
-    setSuccessMessage(message);
-    setShowSuccessPopup(true);
-    setTimeout(() => {
-      setShowSuccessPopup(false);
-    }, 3000);
+  const fetchAttendanceRecords = async () => {
+    try {
+      setLoading(prev => ({ ...prev, attendance: true }));
+      
+      // Build query parameters
+      const params = {
+        page: currentPage,
+        limit: itemsPerPage,
+        ...(selectedCourse !== 'all' && { course_id: selectedCourse }),
+        ...(selectedSession !== 'all' && { session_id: selectedSession }),
+        ...(searchQuery && { search: searchQuery })
+      };
+
+      const response = await api.get('/attendance', { params });
+      
+      if (response.status === 200 && response.data?.data) {
+        const data = response.data.data;
+        
+        // Transform API data to match component structure
+        const transformedData = data.map((record, index) => ({
+          id: index + 1,
+          name: `${record.first_name} ${record.last_name}`,
+          studentId: record.username,
+          email: record.email,
+          attendance: record.attendance_percentage,
+          present: record.status === 'Present',
+          late: record.is_early === false && record.status === 'Present',
+          lastSession: record.last_attendance_status,
+          notes: '',
+          user_id: record.user_id,
+          attendance_percentage: record.attendance_percentage
+        }));
+        
+        setAttendanceData(transformedData);
+        
+        // If API returns pagination metadata, use it
+        if (response.data.metadata) {
+          setTotalPages(response.data.metadata.pages || 1);
+          setTotalItems(response.data.metadata.total || transformedData.length);
+        } else {
+          setTotalPages(1);
+          setTotalItems(transformedData.length);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching attendance records:', err);
+      showToast('Failed to load attendance records', 'error');
+      // Fallback to mock data for demo
+      generateMockAttendanceData();
+    } finally {
+      setLoading(prev => ({ ...prev, attendance: false }));
+    }
+  };
+
+  const generateMockAttendanceData = () => {
+    const mockData = [];
+    const totalStudents = stats.total_students || 30;
+    
+    for (let i = 1; i <= totalStudents; i++) {
+      mockData.push({
+        id: i,
+        name: `Student ${i}`,
+        studentId: `STU2025${String(i).padStart(3, '0')}`,
+        email: `student${i}@example.com`,
+        attendance: Math.floor(Math.random() * 100),
+        present: Math.random() > 0.2,
+        late: Math.random() > 0.7,
+        lastSession: Math.random() > 0.3 ? 'Present' : 'Absent',
+        notes: '',
+        attendance_percentage: Math.floor(Math.random() * 100)
+      });
+    }
+    
+    setAttendanceData(mockData);
+    setTotalItems(mockData.length);
+    setTotalPages(Math.ceil(mockData.length / itemsPerPage));
   };
 
   const handleToggleAttendance = (studentId) => {
@@ -121,93 +233,80 @@ export default function AttendanceContent() {
     );
   };
 
-  const handleSubmitAttendance = () => {
-    setIsSubmitting(true);
-    
-    // Validate attendance data
-    const totalStudents = attendanceData.length;
-    const presentStudents = attendanceData.filter(s => s.present).length;
-    
-    if (presentStudents === 0) {
-      setIsSubmitting(false);
-      setSuccessMessage('⚠️ No students marked as present. Please check attendance.');
-      setShowSuccessPopup(true);
-      setTimeout(() => setShowSuccessPopup(false), 3000);
-      return;
-    }
-
-    // Simulate API call
-    setTimeout(() => {
-      setIsSubmitting(false);
+  const handleSubmitAttendance = async () => {
+    try {
+      setIsSubmitting(true);
       
-      // Remove draft if it exists
-      if (draftId) {
-        localStorage.removeItem(`attendance_draft_${selectedCourse}`);
-        setDraftId(null);
-        setDraftSaved(false);
+      // Validate attendance data
+      const totalStudents = attendanceData.length;
+      const presentStudents = attendanceData.filter(s => s.present).length;
+      
+      if (presentStudents === 0) {
+        showToast('No students marked as present. Please check attendance.', 'error');
+        setIsSubmitting(false);
+        return;
       }
-      
-      // Create submission record
-      const submission = {
-        id: Date.now(),
-        course: selectedCourse,
-        date: new Date().toISOString(),
-        attendance: attendanceData.map(s => ({
-          id: s.id,
-          present: s.present,
-          late: s.late,
-          notes: s.notes
-        }))
-      };
-      
-      // Save to localStorage (simulating database)
-      const submissions = JSON.parse(localStorage.getItem('attendance_submissions') || '[]');
-      submissions.push(submission);
-      localStorage.setItem('attendance_submissions', JSON.stringify(submissions));
-      
-      // Show success message
-      showSuccess(`✅ Attendance submitted successfully! ${presentStudents}/${totalStudents} students present.`);
-    }, 1500);
-  };
 
-  const handleSaveDraft = () => {
-    const draft = {
-      id: draftId || Date.now(),
-      course: selectedCourse,
-      date: new Date().toISOString(),
-      data: attendanceData
-    };
-    
-    localStorage.setItem(`attendance_draft_${selectedCourse}`, JSON.stringify(draft));
-    setDraftId(draft.id);
-    setDraftSaved(true);
-    
-    showSuccess(`💾 Attendance draft saved! You can continue later.`);
+      // Prepare data for API submission
+      const submissionData = attendanceData.map(student => ({
+        user_id: student.user_id || student.id,
+        status: student.present ? (student.late ? 'Late' : 'Present') : 'Absent',
+        notes: student.notes || ''
+      }));
+
+      // Call API to submit attendance
+      // Note: You'll need to adjust this endpoint based on your API
+      const response = await api.post('/attendance/submit', {
+        course_id: selectedCourse,
+        date: new Date().toISOString(),
+        attendance: submissionData
+      });
+
+      if (response.status === 200 || response.status === 201) {
+        showToast(`Attendance submitted successfully! ${presentStudents}/${totalStudents} students present.`, 'success');
+        
+        // Refresh data
+        await fetchAttendanceStats();
+        await fetchAttendanceRecords();
+      } else {
+        throw new Error('Submission failed');
+      }
+    } catch (error) {
+      console.error('Error submitting attendance:', error);
+      showToast('Failed to submit attendance. Please try again.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleExportData = () => {
-    // Export attendance data as CSV
-    const csv = [
-      ['Student ID', 'Name', 'Email', 'Status', 'Attendance %', 'Last Session', 'Notes'],
-      ...attendanceData.map(student => [
-        student.studentId,
-        student.name,
-        student.email,
-        student.present ? (student.late ? 'Late' : 'Present') : 'Absent',
-        `${student.attendance}%`,
-        student.lastSession,
-        student.notes || ''
-      ])
-    ].map(row => row.join(',')).join('\n');
+    try {
+      // Export attendance data as CSV
+      const csv = [
+        ['Student ID', 'Name', 'Email', 'Status', 'Attendance %', 'Last Session', 'Notes'],
+        ...attendanceData.map(student => [
+          student.studentId,
+          student.name,
+          student.email,
+          student.present ? (student.late ? 'Late' : 'Present') : 'Absent',
+          `${student.attendance}%`,
+          student.lastSession,
+          student.notes || ''
+        ])
+      ].map(row => row.join(',')).join('\n');
 
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `attendance_${selectedCourse}_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    
-    showSuccess('📊 Attendance data exported successfully!');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `attendance_${selectedCourse}_${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      
+      showToast('Attendance data exported successfully!', 'success');
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      showToast('Failed to export data. Please try again.', 'error');
+    }
   };
 
   const handleMarkAllPresent = () => {
@@ -218,56 +317,62 @@ export default function AttendanceContent() {
         late: false
       }))
     );
-    showSuccess('✅ All students marked as present!');
+    showToast('All students marked as present!', 'success');
   };
 
   const handleImportRoster = () => {
-    // Simulate file upload
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = '.csv,.xlsx';
-    fileInput.onchange = (e) => {
-      if (e.target.files[0]) {
-        showSuccess(`📁 Roster imported: ${e.target.files[0].name}`);
-      }
-    };
-    fileInput.click();
+    try {
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = '.csv,.xlsx';
+      fileInput.onchange = (e) => {
+        if (e.target.files[0]) {
+          showToast(`Roster imported: ${e.target.files[0].name}`, 'success');
+        }
+      };
+      fileInput.click();
+    } catch (error) {
+      showToast('Failed to import roster. Please try again.', 'error');
+    }
   };
 
   const handleDownloadTemplate = () => {
-    const template = [
-      ['Student ID', 'Name', 'Email', 'Grade Level'],
-      ['STU2025001', 'John Student', 'john@example.com', 'Senior'],
-      ['STU2025002', 'Jane Student', 'jane@example.com', 'Junior'],
-    ].map(row => row.join(',')).join('\n');
+    try {
+      const template = [
+        ['Student ID', 'Name', 'Email', 'Grade Level'],
+        ['STU2025001', 'John Student', 'john@example.com', 'Senior'],
+        ['STU2025002', 'Jane Student', 'jane@example.com', 'Junior'],
+      ].map(row => row.join(',')).join('\n');
 
-    const blob = new Blob([template], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'attendance_template.csv';
-    a.click();
-    
-    showSuccess('📄 Template downloaded successfully!');
-  };
-
-  const handlePrepareAttendance = (classItem) => {
-    setSelectedClass(classItem);
-    setShowAttendanceModal(true);
+      const blob = new Blob([template], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'attendance_template.csv';
+      a.click();
+      
+      showToast('Template downloaded successfully!', 'success');
+    } catch (error) {
+      showToast('Failed to download template. Please try again.', 'error');
+    }
   };
 
   const handleAddNote = (studentId) => {
-    const student = attendanceData.find(s => s.id === studentId);
-    const note = prompt(`Add note for ${student.name}:`, student.notes || '');
-    if (note !== null) {
-      setAttendanceData(prev =>
-        prev.map(s =>
-          s.id === studentId
-            ? { ...s, notes: note }
-            : s
-        )
-      );
-      showSuccess(`📝 Note added for ${student.name}`);
+    try {
+      const student = attendanceData.find(s => s.id === studentId);
+      const note = prompt(`Add note for ${student.name}:`, student.notes || '');
+      if (note !== null) {
+        setAttendanceData(prev =>
+          prev.map(s =>
+            s.id === studentId
+              ? { ...s, notes: note }
+              : s
+          )
+        );
+        showToast(`Note added for ${student.name}`, 'success');
+      }
+    } catch (error) {
+      showToast('Failed to add note. Please try again.', 'error');
     }
   };
 
@@ -290,70 +395,95 @@ Notes: ${student.notes || 'None'}
     }
   };
 
-  const handleCloseModal = () => {
-    setShowAttendanceModal(false);
-    setSelectedClass(null);
+  const handleSearch = () => {
+    setCurrentPage(1); // Reset to first page when searching
+    fetchAttendanceRecords();
   };
 
-  const handleSubmitClassAttendance = () => {
-    if (selectedClass) {
-      // Save class attendance settings
-      const classAttendance = {
-        class: selectedClass,
-        date: new Date().toISOString(),
-        method: 'manual',
-        notes: '',
-        autoSave: true
-      };
-      
-      localStorage.setItem('class_attendance_settings', JSON.stringify(classAttendance));
-      
-      showSuccess(`🎯 Attendance prepared for ${selectedClass.course} at ${selectedClass.time}`);
-    }
-    handleCloseModal();
-  };
-
-  const handleClearDraft = () => {
-    if (draftId) {
-      localStorage.removeItem(`attendance_draft_${selectedCourse}`);
-      setDraftId(null);
-      setDraftSaved(false);
-      showSuccess('🗑️ Draft cleared successfully!');
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
     }
   };
 
-  const filteredStudents = attendanceData.filter(student =>
-    student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.studentId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const attendanceStats = {
-    total: attendanceData.length,
-    present: attendanceData.filter(s => s.present).length,
-    absent: attendanceData.filter(s => !s.present).length,
-    late: attendanceData.filter(s => s.late).length,
-    averageAttendance: attendanceData.reduce((sum, s) => sum + s.attendance, 0) / attendanceData.length,
+  const handleItemsPerPageChange = (value) => {
+    setItemsPerPage(value);
+    setCurrentPage(1); // Reset to first page when changing items per page
   };
+
+  // Calculate pagination range
+  const getPaginationRange = () => {
+    const range = [];
+    const maxVisiblePages = 5;
+    
+    if (totalPages <= maxVisiblePages) {
+      for (let i = 1; i <= totalPages; i++) range.push(i);
+    } else {
+      const leftOffset = Math.floor(maxVisiblePages / 2);
+      const rightOffset = maxVisiblePages - leftOffset - 1;
+      
+      let start = currentPage - leftOffset;
+      let end = currentPage + rightOffset;
+      
+      if (start < 1) {
+        end += 1 - start;
+        start = 1;
+      }
+      
+      if (end > totalPages) {
+        start -= end - totalPages;
+        end = totalPages;
+      }
+      
+      start = Math.max(start, 1);
+      
+      for (let i = start; i <= end; i++) {
+        range.push(i);
+      }
+    }
+    
+    return range;
+  };
+
+  // Get current page data
+  const getCurrentPageData = () => {
+    if (loading.attendance) return [];
+    
+    // Filter by search query
+    let filteredData = attendanceData;
+    if (searchQuery) {
+      filteredData = attendanceData.filter(student =>
+        student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.studentId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.email.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+    
+    // Calculate pagination
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    
+    return filteredData.slice(startIndex, endIndex);
+  };
+
+  const currentPageData = getCurrentPageData();
+  const filteredTotalItems = searchQuery 
+    ? attendanceData.filter(student =>
+        student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.studentId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.email.toLowerCase().includes(searchQuery.toLowerCase())
+      ).length
+    : totalItems;
 
   return (
     <div className="space-y-6">
-      {/* Success Popup */}
-      {showSuccessPopup && (
-        <div className="fixed top-4 right-4 z-50 animate-slide-in">
-          <div className="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-4 rounded-lg shadow-lg flex items-center space-x-3">
-            <CheckCircle size={24} />
-            <div>
-              <p className="font-semibold">{successMessage}</p>
-            </div>
-            <button 
-              onClick={() => setShowSuccessPopup(false)}
-              className="ml-4 hover:bg-white/20 p-1 rounded-full"
-            >
-              <X size={18} />
-            </button>
-          </div>
-        </div>
+      {/* Toast Notification */}
+      {toast.show && (
+        <Toast 
+          message={toast.message} 
+          type={toast.type} 
+          onClose={() => setToast({ ...toast, show: false })} 
+        />
       )}
 
       {/* Header */}
@@ -364,12 +494,6 @@ Notes: ${student.notes || 'None'}
             <p className="text-primary-lighter">Track and submit student attendance for all class types</p>
           </div>
           <div className="mt-4 md:mt-0 flex items-center space-x-3">
-            {draftSaved && (
-              <div className="flex items-center space-x-2 bg-white/20 px-3 py-2 rounded-lg">
-                <Save size={16} />
-                <span className="text-sm">Draft Saved</span>
-              </div>
-            )}
             <button
               onClick={handleExportData}
               className="px-6 py-3 border-2 border-white text-white hover:bg-white/10 font-semibold rounded-lg flex items-center space-x-2"
@@ -390,7 +514,9 @@ Notes: ${student.notes || 'None'}
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Total Students</p>
-                  <p className="text-2xl font-bold text-gray-800 mt-1">{attendanceStats.total}</p>
+                  <p className="text-2xl font-bold text-gray-800 mt-1">
+                    {loading.stats ? '...' : stats.total_students}
+                  </p>
                 </div>
                 <div className="p-3 rounded-lg bg-blue-100">
                   <Users className="text-blue-600" size={24} />
@@ -402,9 +528,13 @@ Notes: ${student.notes || 'None'}
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Present Today</p>
-                  <p className="text-2xl font-bold text-gray-800 mt-1">{attendanceStats.present}</p>
+                  <p className="text-2xl font-bold text-gray-800 mt-1">
+                    {loading.stats ? '...' : stats.present_today}
+                  </p>
                   <p className="text-sm text-green-600 mt-1">
-                    {((attendanceStats.present / attendanceStats.total) * 100).toFixed(1)}%
+                    {loading.stats ? '...' : stats.total_students > 0 
+                      ? `${((stats.present_today / stats.total_students) * 100).toFixed(1)}%`
+                      : '0%'}
                   </p>
                 </div>
                 <div className="p-3 rounded-lg bg-green-100">
@@ -417,9 +547,13 @@ Notes: ${student.notes || 'None'}
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Absent Today</p>
-                  <p className="text-2xl font-bold text-gray-800 mt-1">{attendanceStats.absent}</p>
+                  <p className="text-2xl font-bold text-gray-800 mt-1">
+                    {loading.stats ? '...' : stats.absent_today}
+                  </p>
                   <p className="text-sm text-red-600 mt-1">
-                    {((attendanceStats.absent / attendanceStats.total) * 100).toFixed(1)}%
+                    {loading.stats ? '...' : stats.total_students > 0 
+                      ? `${((stats.absent_today / stats.total_students) * 100).toFixed(1)}%`
+                      : '0%'}
                   </p>
                 </div>
                 <div className="p-3 rounded-lg bg-red-100">
@@ -432,10 +566,12 @@ Notes: ${student.notes || 'None'}
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Avg. Attendance</p>
-                  <p className="text-2xl font-bold text-gray-800 mt-1">{attendanceStats.averageAttendance.toFixed(1)}%</p>
+                  <p className="text-2xl font-bold text-gray-800 mt-1">
+                    {loading.stats ? '...' : `${stats.avg_attendance}%`}
+                  </p>
                   <p className="text-sm text-green-600 mt-1 flex items-center">
                     <TrendingUp size={14} className="mr-1" />
-                    +5.2%
+                    {stats.avg_attendance > 0 ? '+5.2%' : 'N/A'}
                   </p>
                 </div>
                 <div className="p-3 rounded-lg bg-purple-100">
@@ -489,7 +625,7 @@ Notes: ${student.notes || 'None'}
               >
                 {courses.map((course) => (
                   <option key={course.id} value={course.id}>
-                    {course.name} ({course.students} students)
+                    {course.name} {course.students > 0 ? `(${course.students} students)` : ''}
                   </option>
                 ))}
               </select>
@@ -514,32 +650,12 @@ Notes: ${student.notes || 'None'}
               placeholder="Search students..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
               className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-full md:w-64 focus:ring-2 focus:ring-primary-light focus:border-transparent"
             />
             <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
           </div>
         </div>
-
-        {/* Draft Status */}
-        {draftSaved && (
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Save className="text-blue-600" size={20} />
-                <div>
-                  <p className="font-medium text-blue-800">Draft Available</p>
-                  <p className="text-sm text-blue-600">You have an unsaved attendance draft. Submit or clear it.</p>
-                </div>
-              </div>
-              <button
-                onClick={handleClearDraft}
-                className="px-3 py-1 text-sm text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
-              >
-                Clear Draft
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Attendance Table */}
         <div className="overflow-x-auto">
@@ -555,124 +671,176 @@ Notes: ${student.notes || 'None'}
               </tr>
             </thead>
             <tbody>
-              {filteredStudents.map((student) => (
-                <tr key={student.id} className="border-b hover:bg-gray-50">
-                  <td className="py-4 px-4">
-                    <div>
-                      <p className="font-medium text-gray-800">{student.name}</p>
-                      <p className="text-sm text-gray-600">{student.email}</p>
-                    </div>
-                  </td>
-                  <td className="py-4 px-4">
-                    <span className="font-medium">{student.studentId}</span>
-                  </td>
-                  <td className="py-4 px-4">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-24 bg-gray-200 rounded-full h-2">
-                        <div
-                          className={`h-2 rounded-full ${
-                            student.attendance >= 90 ? 'bg-green-500' :
-                            student.attendance >= 70 ? 'bg-yellow-500' : 'bg-red-500'
-                          }`}
-                          style={{ width: `${student.attendance}%` }}
-                        ></div>
-                      </div>
-                      <span className="font-medium">{student.attendance}%</span>
-                    </div>
-                  </td>
-                  <td className="py-4 px-4">
-                    <span className={`px-3 py-1 rounded-full text-sm ${
-                      student.lastSession === 'Present'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {student.lastSession}
-                    </span>
-                  </td>
-                  <td className="py-4 px-4">
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => handleToggleAttendance(student.id)}
-                        className={`px-3 py-1 rounded-lg text-sm transition-colors ${
-                          student.present
-                            ? 'bg-green-100 text-green-800 border border-green-200 hover:bg-green-200'
-                            : 'bg-gray-100 text-gray-800 border border-gray-200 hover:bg-gray-200'
-                        }`}
-                      >
-                        {student.present ? 'Present' : 'Absent'}
-                      </button>
-                      <button
-                        onClick={() => handleToggleLate(student.id)}
-                        className={`px-3 py-1 rounded-lg text-sm transition-colors ${
-                          student.late
-                            ? 'bg-yellow-100 text-yellow-800 border border-yellow-200 hover:bg-yellow-200'
-                            : 'bg-gray-100 text-gray-800 border border-gray-200 hover:bg-gray-200'
-                        }`}
-                      >
-                        {student.late ? 'Late' : 'On Time'}
-                      </button>
-                    </div>
-                  </td>
-                  <td className="py-4 px-4">
-                    <div className="flex items-center space-x-2">
-                      <button 
-                        onClick={() => handleAddNote(student.id)}
-                        className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
-                        title="Add Note"
-                      >
-                        <FileText size={16} />
-                      </button>
-                      <button 
-                        onClick={() => handleViewDetails(student.id)}
-                        className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded"
-                        title="View Details"
-                      >
-                        <AlertCircle size={16} />
-                      </button>
-                    </div>
+              {loading.attendance ? (
+                <tr>
+                  <td colSpan="6" className="py-8 text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-dark mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading attendance data...</p>
                   </td>
                 </tr>
-              ))}
+              ) : currentPageData.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="py-8 text-center">
+                    <AlertCircle className="mx-auto text-gray-400 mb-2" size={24} />
+                    <p className="text-gray-600">No attendance records found</p>
+                  </td>
+                </tr>
+              ) : (
+                currentPageData.map((student) => (
+                  <tr key={student.id} className="border-b hover:bg-gray-50">
+                    <td className="py-4 px-4">
+                      <div>
+                        <p className="font-medium text-gray-800">{student.name}</p>
+                        <p className="text-sm text-gray-600">{student.email}</p>
+                      </div>
+                    </td>
+                    <td className="py-4 px-4">
+                      <span className="font-medium">{student.studentId}</span>
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-24 bg-gray-200 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full ${
+                              student.attendance >= 90 ? 'bg-green-500' :
+                              student.attendance >= 70 ? 'bg-yellow-500' : 'bg-red-500'
+                            }`}
+                            style={{ width: `${student.attendance}%` }}
+                          ></div>
+                        </div>
+                        <span className="font-medium">{student.attendance}%</span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-4">
+                      <span className={`px-3 py-1 rounded-full text-sm ${
+                        student.lastSession === 'Present'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {student.lastSession}
+                      </span>
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => handleToggleAttendance(student.id)}
+                          className={`px-3 py-1 rounded-lg text-sm transition-colors ${
+                            student.present
+                              ? 'bg-green-100 text-green-800 border border-green-200 hover:bg-green-200'
+                              : 'bg-gray-100 text-gray-800 border border-gray-200 hover:bg-gray-200'
+                          }`}
+                        >
+                          {student.present ? 'Present' : 'Absent'}
+                        </button>
+                        <button
+                          onClick={() => handleToggleLate(student.id)}
+                          className={`px-3 py-1 rounded-lg text-sm transition-colors ${
+                            student.late
+                              ? 'bg-yellow-100 text-yellow-800 border border-yellow-200 hover:bg-yellow-200'
+                              : 'bg-gray-100 text-gray-800 border border-gray-200 hover:bg-gray-200'
+                          }`}
+                        >
+                          {student.late ? 'Late' : 'On Time'}
+                        </button>
+                      </div>
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="flex items-center space-x-2">
+                        <button 
+                          onClick={() => handleAddNote(student.id)}
+                          className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                          title="Add Note"
+                        >
+                          <FileText size={16} />
+                        </button>
+                        <button 
+                          onClick={() => handleViewDetails(student.id)}
+                          className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded"
+                          title="View Details"
+                        >
+                          <AlertCircle size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
 
-        {/* Bulk Actions */}
-        <div className="flex items-center justify-between mt-6 pt-6 border-t">
-          <div className="text-sm text-gray-600 flex items-center space-x-2">
-            <span>Showing {filteredStudents.length} of {attendanceData.length} students</span>
-            {draftSaved && (
-              <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                Draft Saved
+        {/* Pagination Controls */}
+        {!loading.attendance && currentPageData.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between mt-6 pt-6 border-t">
+            <div className="flex items-center space-x-4 mb-4 sm:mb-0">
+              <span className="text-sm text-gray-600">
+                Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredTotalItems)} of {filteredTotalItems} entries
               </span>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
+                className="px-3 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-light focus:border-transparent"
+              >
+                <option value="5">5 per page</option>
+                <option value="10">10 per page</option>
+                <option value="25">25 per page</option>
+                <option value="50">50 per page</option>
+              </select>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="p-2 rounded-lg border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                <ChevronLeft size={16} />
+              </button>
+
+              {getPaginationRange().map((pageNum) => (
+                <button
+                  key={pageNum}
+                  onClick={() => handlePageChange(pageNum)}
+                  className={`px-3 py-1 rounded-lg text-sm ${
+                    currentPage === pageNum
+                      ? 'bg-primary-dark text-white'
+                      : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              ))}
+
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="p-2 rounded-lg border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                <ChevronRightIcon size={16} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Submit Button */}
+        <div className="flex justify-end mt-6">
+          <button
+            onClick={handleSubmitAttendance}
+            disabled={isSubmitting || loading.attendance}
+            className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg disabled:opacity-50 flex items-center space-x-2 transition-colors"
+          >
+            {isSubmitting ? (
+              <>
+                <Clock size={16} className="animate-spin" />
+                <span>Submitting...</span>
+              </>
+            ) : (
+              <>
+                <Send size={16} />
+                <span>Submit Attendance</span>
+              </>
             )}
-          </div>
-          <div className="flex space-x-3">
-            <button 
-              onClick={handleSaveDraft}
-              className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg flex items-center space-x-2 transition-colors"
-            >
-              <Save size={16} />
-              <span>Save Draft</span>
-            </button>
-            <button
-              onClick={handleSubmitAttendance}
-              disabled={isSubmitting}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg disabled:opacity-50 flex items-center space-x-2 transition-colors"
-            >
-              {isSubmitting ? (
-                <>
-                  <Clock size={16} className="animate-spin" />
-                  <span>Submitting...</span>
-                </>
-              ) : (
-                <>
-                  <Send size={16} />
-                  <span>Submit Attendance</span>
-                </>
-              )}
-            </button>
-          </div>
+          </button>
         </div>
       </div>
 

@@ -27,7 +27,7 @@ export const generateKitToken = (roomID, userID) => {
     SERVER_SECRET,
     roomID,
     userID,
-    'Instructor_' + userID
+    roomID
   );
 };
 

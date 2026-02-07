@@ -33,14 +33,19 @@ export const api = {
     const url = `${BASE_URL}${endpoint}`;
     const token = getAuthToken();
     
+    // Check if data is FormData
+    const isFormData = data instanceof FormData;
+    
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        // Only set Content-Type for JSON, let browser set it for FormData
+        ...(!isFormData && { 'Content-Type': 'application/json' }),
         ...(token && { 'Authorization': `Bearer ${token}` }),
         ...options.headers,
       },
-      body: JSON.stringify(data),
+      // Only stringify if not FormData
+      body: isFormData ? data : JSON.stringify(data),
       ...options,
     });
 
@@ -56,14 +61,17 @@ export const api = {
     const url = `${BASE_URL}${endpoint}`;
     const token = getAuthToken();
     
+    // Check if data is FormData
+    const isFormData = data instanceof FormData;
+    
     const response = await fetch(url, {
       method: 'PATCH',
       headers: {
-        'Content-Type': 'application/json',
+        ...(!isFormData && { 'Content-Type': 'application/json' }),
         ...(token && { 'Authorization': `Bearer ${token}` }),
         ...options.headers,
       },
-      body: JSON.stringify(data),
+      body: isFormData ? data : JSON.stringify(data),
       ...options,
     });
 
@@ -79,14 +87,17 @@ export const api = {
     const url = `${BASE_URL}${endpoint}`;
     const token = getAuthToken();
     
+    // Check if data is FormData
+    const isFormData = data instanceof FormData;
+    
     const response = await fetch(url, {
       method: 'PUT',
       headers: {
-        'Content-Type': 'application/json',
+        ...(!isFormData && { 'Content-Type': 'application/json' }),
         ...(token && { 'Authorization': `Bearer ${token}` }),
         ...options.headers,
       },
-      body: JSON.stringify(data),
+      body: isFormData ? data : JSON.stringify(data),
       ...options,
     });
 
