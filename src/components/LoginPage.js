@@ -133,79 +133,149 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-white flex">
       {/* Left Side - Image/Illustration */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary-dark to-primary relative overflow-hidden">
-        <div className="absolute inset-0 bg-black/10"></div>
-        
-        {/* Decorative Elements */}
-        <div className="absolute top-10 left-10 w-32 h-32 bg-white/10 rounded-full"></div>
-        <div className="absolute bottom-20 right-20 w-40 h-40 bg-white/5 rounded-full"></div>
-        <div className="absolute top-1/3 right-1/4 w-24 h-24 bg-white/8 rounded-full"></div>
+<div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary-dark to-primary relative overflow-hidden">
+  {/* Subtle Texture Background */}
+  <div className="absolute inset-0 opacity-5">
+    <div className="absolute inset-0" style={{
+      backgroundImage: `radial-gradient(circle at 2px 2px, white 1px, transparent 0)`,
+      backgroundSize: '40px 40px'
+    }}></div>
+  </div>
+  
+  {/* Soft Organic Shapes */}
+  <div className="absolute -top-32 -right-32 w-96 h-96 bg-white/5 rounded-full blur-3xl"></div>
+  <div className="absolute -bottom-32 -left-32 w-96 h-96 bg-white/5 rounded-full blur-3xl"></div>
+  <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 w-80 h-80 bg-white/5 rounded-full blur-3xl"></div>
 
-        <div className="relative z-10 flex flex-col justify-between p-12 text-white h-full">
-          <div>
-            <div className="flex items-center gap-3 mb-8">
-              <div className="bg-white rounded-xl">
-                <Image src="/assets/images/ddTechLogo.png" alt="logo" width="50" height="50" className="w-[80px] p-0" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold">DDTech</h1>
-                <p className="text-primary-lighter text-sm">Learning Platform</p>
-              </div>
-            </div>
+  {/* Minimalist Accent Lines */}
+  <div className="absolute top-20 right-20 w-px h-40 bg-gradient-to-b from-white/30 to-transparent"></div>
+  <div className="absolute bottom-20 left-20 w-px h-40 bg-gradient-to-t from-white/30 to-transparent"></div>
+  <div className="absolute top-1/2 right-40 w-20 h-px bg-white/20"></div>
+  <div className="absolute bottom-1/3 left-40 w-20 h-px bg-white/20"></div>
 
-            <div className="mt-20">
-              <h2 className="text-4xl font-bold mb-6">Welcome to DDTech Teacher</h2>
-              <p className="text-xl text-primary-lighter mb-10">
-                Manage your educational platform with powerful tools and analytics
-              </p>
-              
-              <div className="space-y-6">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                    <CheckCircle size={20} />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Secure Access</h3>
-                    <p className="text-primary-lighter text-sm">Enterprise-grade security</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                    <CheckCircle size={20} />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Real-time Analytics</h3>
-                    <p className="text-primary-lighter text-sm">Monitor platform performance</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                    <CheckCircle size={20} />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Team Collaboration</h3>
-                    <p className="text-primary-lighter text-sm">Manage teachers and staff</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-6">
-            <div className="flex -space-x-3">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="w-10 h-10 bg-white/20 rounded-full border-2 border-primary-dark"></div>
-              ))}
-            </div>
-            <div>
-              <p className="font-medium">Join 500+ administrators</p>
-              <p className="text-primary-lighter text-sm">Managing educational platforms worldwide</p>
-            </div>
+  <div className="relative z-10 flex flex-col w-full h-full">
+    
+    {/* Simple Header */}
+    <div className="px-12 pt-12">
+      <div className="flex items-center gap-4">
+        <div className="bg-white rounded-xl p-2 shadow-lg">
+          <Image 
+            src="/assets/images/ddTechLogo.png" 
+            alt="DDTech" 
+            width={45} 
+            height={45} 
+            className="w-[60px]" 
+          />
+        </div>
+        <div>
+          <h1 className="text-2xl font-light tracking-wide text-white">DDTech</h1>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="w-1.5 h-1.5 bg-white/60 rounded-full"></span>
+            <p className="text-white/70 text-xs uppercase tracking-wider">Teacher Portal</p>
           </div>
         </div>
       </div>
+    </div>
+
+    {/* Centered Content - Minimal & Elegant */}
+    <div className="flex-1 flex flex-col items-center justify-center px-12">
+      <div className="max-w-md text-center">
+        
+        {/* Welcome Message */}
+        <div className="mb-12">
+          <span className="inline-block px-4 py-1.5 bg-white/10 rounded-full text-white/80 text-xs uppercase tracking-wider mb-6">
+            Welcome Back
+          </span>
+          <h2 className="text-4xl md:text-5xl font-light text-white mb-4 leading-tight">
+            DDTech
+            <span className="font-semibold block mt-2">Teacher</span>
+          </h2>
+          <div className="w-16 h-0.5 bg-white/40 mx-auto my-6"></div>
+          <p className="text-white/70 text-lg font-light leading-relaxed">
+            Your dedicated workspace for managing courses, students, and educational content
+          </p>
+        </div>
+
+        {/* Feature List - Clean Typography */}
+        <div className="space-y-5 text-left bg-white/5 backdrop-blur-sm rounded-2xl p-8 border border-white/10">
+          <div className="flex items-center gap-4">
+            <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-white font-medium">Course Management</p>
+              <p className="text-white/60 text-sm">Create and organize curriculum</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-white font-medium">Student Progress</p>
+              <p className="text-white/60 text-sm">Track and evaluate performance</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-white font-medium">Team Collaboration</p>
+              <p className="text-white/60 text-sm">Work with fellow educators</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-white font-medium">Resource Library</p>
+              <p className="text-white/60 text-sm">Access teaching materials</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Decorative Quote */}
+        <div className="mt-12 italic">
+          <p className="text-white/50 text-sm font-light">
+            "Empowering educators to inspire the next generation"
+          </p>
+        </div>
+      </div>
+    </div>
+
+    {/* Simple Footer */}
+    <div className="px-12 pb-12">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex -space-x-2">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="w-8 h-8 bg-white/15 rounded-full border border-white/30"></div>
+            ))}
+          </div>
+          <p className="text-white/60 text-sm">
+            Trusted by educators
+          </p>
+        </div>
+        <div className="text-white/40 text-xs uppercase tracking-wider">
+          v2.0
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
       {/* Right Side - Login Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-4 md:p-8">
