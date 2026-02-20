@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { 
   FileText, 
@@ -23,17 +23,43 @@ import {
   Send,
   BookOpen,
   X,
-  User
+  User,
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
+import { api } from '@/services/api';
 
 export default function GradingContent() {
   const [selectedCourse, setSelectedCourse] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
-  const [gradingRubric, setGradingRubric] = useState({
-    criteria1: { score: 0, max: 25, comment: '' },
-    criteria2: { score: 0, max: 25, comment: '' },
-    criteria3: { score: 0, max: 25, comment: '' },
-    criteria4: { score: 0, max: 25, comment: '' },
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+
+  // API Data States
+  const [assignments, setAssignments] = useState([]);
+  const [stats, setStats] = useState({
+    total_submissions: 0,
+    total_pending: 0,
+    avg_grade: 0
+  });
+  const [loading, setLoading] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [pagination, setPagination] = useState({
+    total: 0,
+    page: 1,
+    limit: 10,
+    pages: 1
+  });
+
+  // Grading state
+  const [gradingData, setGradingData] = useState({
+    code_quality: 0,
+    documentation: 0,
+    functionality: 0,
+    creativity: 0,
+    final_grade: 0
   });
 
   // Modal states
@@ -43,6 +69,7 @@ export default function GradingContent() {
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
   const [gradeValue, setGradeValue] = useState('');
+  const [submittingGrade, setSubmittingGrade] = useState(false);
 
   const courses = [
     { id: 'all', name: 'All Courses', assignments: 15 },
@@ -51,115 +78,208 @@ export default function GradingContent() {
     { id: 'cs301', name: 'React Masterclass', assignments: 3 },
   ];
 
-  const assignments = [
-    {
-      id: 1,
-      title: 'Assignment 2: JavaScript Calculator',
-      course: 'Web App Development',
-      student: 'John Student',
-      studentId: 'STU2025001',
-      submitted: 'Nov 30, 2025 11:45 AM',
-      status: 'pending',
-      score: null,
-      maxScore: 100,
-      fileType: 'ZIP',
-      fileSize: '2.4 MB',
-      description: 'A functional calculator built with vanilla JavaScript implementing basic arithmetic operations and error handling.',
-    },
-    {
-      id: 2,
-      title: 'Quiz 3: JavaScript Basics',
-      course: 'Web App Development',
-      student: 'Sarah Johnson',
-      studentId: 'STU2025002',
-      submitted: 'Dec 1, 2025 9:15 AM',
-      status: 'graded',
-      score: 92,
-      maxScore: 100,
-      fileType: 'PDF',
-      fileSize: '1.2 MB',
-      description: 'Multiple choice quiz covering JavaScript fundamentals, closures, and event handling.',
-    },
-    {
-      id: 3,
-      title: 'Midterm Project',
-      course: 'Advanced JavaScript',
-      student: 'Michael Chen',
-      studentId: 'STU2025003',
-      submitted: 'Dec 10, 2025 2:30 PM',
-      status: 'needs_review',
-      score: null,
-      maxScore: 100,
-      fileType: 'ZIP',
-      fileSize: '15.8 MB',
-      description: 'E-commerce dashboard with real-time data visualization and API integration.',
-    },
-    {
-      id: 4,
-      title: 'React Todo App',
-      course: 'React Masterclass',
-      student: 'Emily Wilson',
-      studentId: 'STU2025004',
-      submitted: 'Dec 12, 2025 4:00 PM',
-      status: 'pending',
-      score: null,
-      maxScore: 100,
-      fileType: 'GIT',
-      fileSize: 'N/A',
-      description: 'Full-featured todo application with drag-and-drop functionality and local storage.',
-    },
-    {
-      id: 5,
-      title: 'CSS Grid Layout',
-      course: 'Web App Development',
-      student: 'David Brown',
-      studentId: 'STU2025005',
-      submitted: 'Nov 25, 2025 10:20 AM',
-      status: 'graded',
-      score: 88,
-      maxScore: 100,
-      fileType: 'ZIP',
-      fileSize: '3.1 MB',
-      description: 'Responsive webpage layout using CSS Grid with mobile-first approach.',
-    },
-  ];
+  // Fetch assignments from API
+  useEffect(() => {
+    fetchAssignments();
+    fetchStats();
+  }, [selectedStatus, currentPage, itemsPerPage]);
 
-  const stats = [
-    { label: 'Total Assignments', value: '15', icon: FileText, color: 'blue' },
-    { label: 'Pending Grading', value: '8', icon: Clock, color: 'orange' },
-    { label: 'Avg. Score', value: '89.2%', icon: TrendingUp, color: 'green' },
-    { label: 'On Time Submissions', value: '92%', icon: CheckCircle, color: 'purple' },
-  ];
+  const fetchAssignments = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      let url = `/assignment-submissions?page=${currentPage}&limit=${itemsPerPage}`;
+      
+      if (selectedStatus !== 'all') {
+        url += `&status=${selectedStatus}`;
+      }
+      
+      if (searchQuery) {
+        url += `&search=${encodeURIComponent(searchQuery)}`;
+      }
 
-  const filteredAssignments = assignments.filter(assignment => {
-    const courseMatch = selectedCourse === 'all' || assignment.course === courses.find(c => c.id === selectedCourse)?.name;
-    const statusMatch = selectedStatus === 'all' || assignment.status === selectedStatus;
-    return courseMatch && statusMatch;
-  });
-
-  // Handler functions
-  const handleDownloadSubmission = (assignmentId) => {
-    alert(`Downloading submission for assignment ${assignmentId}`);
+      const response = await api.get(url);
+      
+      if (response.status === 200 && response.data[0]) {
+        const responseData = response.data[0]; // API returns array with one object
+        
+        if (responseData) {
+          setPagination(responseData.metadata);
+          
+          const formattedAssignments = responseData.data.map(item => ({
+            id: item._id,
+            title: item.title,
+            course: 'Web App Development', // You might want to fetch this from material_id
+            student: `${item.user.first_name} ${item.user.last_name}`,
+            studentId: item.user.username,
+            submitted: new Date(item.date).toLocaleString('en-US', { 
+              month: 'short', 
+              day: 'numeric', 
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            }),
+            status: item.status.toLowerCase(),
+            score: item.final_grade || null,
+            maxScore: 100,
+            fileType: item.submission_src ? 'Link' : 'File',
+            fileSize: 'N/A',
+            description: item.comment || 'No description provided',
+            submission_src: item.submission_src,
+            material_id: item.material_id,
+            user: item.user
+          }));
+          
+          setAssignments(formattedAssignments);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching assignments:', err);
+      setError('Failed to load assignments. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleGradeAssignment = (assignmentId) => {
-    const assignment = assignments.find(a => a.id === assignmentId);
+  const fetchStats = async () => {
+    setStatsLoading(true);
+    try {
+      const response = await api.get('/assignment-submissions/stats');
+      
+      if (response.status === 200 && response.data) {
+        setStats(response.data);
+      }
+    } catch (err) {
+      console.error('Error fetching stats:', err);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  // Handler functions
+  const handleDownloadSubmission = (submissionSrc) => {
+    if (submissionSrc) {
+      window.open(submissionSrc, '_blank');
+    } else {
+      alert('No submission file available');
+    }
+  };
+
+  const handleGradeAssignment = (assignment) => {
     setSelectedAssignment(assignment);
-    setGradeValue(assignment?.score?.toString() || '');
+    
+    // Pre-fill grading data if already graded
+    if (assignment.score) {
+      setGradingData({
+        code_quality: assignment.score * 0.25, // Approximate distribution
+        documentation: assignment.score * 0.25,
+        functionality: assignment.score * 0.25,
+        creativity: assignment.score * 0.25,
+        final_grade: assignment.score
+      });
+      setGradeValue(assignment.score.toString());
+    } else {
+      setGradingData({
+        code_quality: 0,
+        documentation: 0,
+        functionality: 0,
+        creativity: 0,
+        final_grade: 0
+      });
+      setGradeValue('');
+    }
+    
     setShowGradeModal(true);
   };
 
-  const handlePreview = (assignmentId) => {
-    const assignment = assignments.find(a => a.id === assignmentId);
+  const handlePreview = (assignment) => {
     setSelectedAssignment(assignment);
     setShowPreviewModal(true);
   };
 
-  const handleAddFeedback = (assignmentId) => {
-    const assignment = assignments.find(a => a.id === assignmentId);
+  const handleAddFeedback = (assignment) => {
     setSelectedAssignment(assignment);
-    setFeedbackText('');
+    setFeedbackText(assignment.description || '');
     setShowFeedbackModal(true);
+  };
+
+  const handleSubmitGrade = async () => {
+    if (!selectedAssignment || !gradeValue) {
+      alert('Please enter a grade');
+      return;
+    }
+
+    const score = parseInt(gradeValue);
+    if (isNaN(score) || score < 0 || score > 100) {
+      alert('Please enter a valid grade between 0 and 100');
+      return;
+    }
+
+    setSubmittingGrade(true);
+    
+    try {
+      // Calculate individual scores (you might want to adjust this logic)
+      const payload = {
+        submission_id: selectedAssignment.id,
+        score: {
+          code_quality: Math.round(score * 0.25),
+          documentation: Math.round(score * 0.25),
+          functionality: Math.round(score * 0.25),
+          creativity: Math.round(score * 0.25),
+          final_grade: score
+        }
+      };
+
+      const response = await api.post('/assignment-submissions/grade', payload);
+      
+      if (response.status === 200) {
+        alert(`Grade ${score}/100 submitted successfully for ${selectedAssignment.title}`);
+        
+        // Refresh the assignments list
+        fetchAssignments();
+        fetchStats();
+        
+        handleCloseGradeModal();
+      } else {
+        throw new Error(response.message || 'Failed to submit grade');
+      }
+    } catch (err) {
+      console.error('Error submitting grade:', err);
+      alert(`Failed to submit grade: ${err.message}`);
+    } finally {
+      setSubmittingGrade(false);
+    }
+  };
+
+  const handleUpdateGradingCriteria = (criteria, value) => {
+    const newGradingData = {
+      ...gradingData,
+      [criteria]: parseInt(value) || 0
+    };
+    
+    // Calculate final grade as average of all criteria
+    const total = newGradingData.code_quality + newGradingData.documentation + 
+                  newGradingData.functionality + newGradingData.creativity;
+    newGradingData.final_grade = Math.round(total / 4);
+    
+    setGradingData(newGradingData);
+    setGradeValue(newGradingData.final_grade.toString());
+  };
+
+  const handleSubmitFeedback = async () => {
+    if (!selectedAssignment || !feedbackText.trim()) {
+      alert('Please enter feedback text');
+      return;
+    }
+
+    try {
+      // You might need an endpoint for feedback
+      alert(`Feedback submitted for ${selectedAssignment.title}`);
+      handleCloseFeedbackModal();
+    } catch (err) {
+      console.error('Error submitting feedback:', err);
+      alert('Failed to submit feedback');
+    }
   };
 
   // Modal close handlers
@@ -167,6 +287,13 @@ export default function GradingContent() {
     setShowGradeModal(false);
     setSelectedAssignment(null);
     setGradeValue('');
+    setGradingData({
+      code_quality: 0,
+      documentation: 0,
+      functionality: 0,
+      creativity: 0,
+      final_grade: 0
+    });
   };
 
   const handleClosePreviewModal = () => {
@@ -180,39 +307,15 @@ export default function GradingContent() {
     setFeedbackText('');
   };
 
-  const handleSubmitGrade = () => {
-    if (selectedAssignment && gradeValue) {
-      const score = parseInt(gradeValue);
-      if (!isNaN(score) && score >= 0 && score <= selectedAssignment.maxScore) {
-        alert(`Grade ${score}/${selectedAssignment.maxScore} submitted for ${selectedAssignment.title}`);
-        handleCloseGradeModal();
-      } else {
-        alert('Please enter a valid grade');
-      }
+  const handleSearch = () => {
+    setCurrentPage(1);
+    fetchAssignments();
+  };
+
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= pagination.pages) {
+      setCurrentPage(newPage);
     }
-  };
-
-  const handleSubmitFeedback = () => {
-    if (selectedAssignment && feedbackText.trim()) {
-      alert(`Feedback submitted for ${selectedAssignment.title}:\n\n${feedbackText}`);
-      handleCloseFeedbackModal();
-    } else {
-      alert('Please enter feedback text');
-    }
-  };
-
-  const handleUpdateRubric = (criteria, field, value) => {
-    setGradingRubric(prev => ({
-      ...prev,
-      [criteria]: {
-        ...prev[criteria],
-        [field]: value
-      }
-    }));
-  };
-
-  const calculateTotalScore = () => {
-    return Object.values(gradingRubric).reduce((sum, criteria) => sum + criteria.score, 0);
   };
 
   const getStatusBadge = (status) => {
@@ -221,10 +324,10 @@ export default function GradingContent() {
         return <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded-full">Pending</span>;
       case 'graded':
         return <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">Graded</span>;
-      case 'needs_review':
-        return <span className="px-2 py-1 bg-red-100 text-red-800 text-xs font-medium rounded-full">Needs Review</span>;
+      case 'resubmitted':
+        return <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">Resubmitted</span>;
       default:
-        return null;
+        return <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs font-medium rounded-full">{status}</span>;
     }
   };
 
@@ -237,33 +340,78 @@ export default function GradingContent() {
             <h1 className="text-2xl md:text-3xl font-bold mb-2">Assessment Grading</h1>
             <p className="text-primary-lighter">Grade assignments, provide feedback, and track student performance</p>
           </div>
-          {/* <div className="mt-4 md:mt-0">
-            <button className="px-6 py-3 bg-white text-purple-600 hover:bg-gray-100 font-semibold rounded-lg">
-              Upload Grades
+          <div className="mt-4 md:mt-0 flex space-x-2">
+            <button 
+              onClick={fetchAssignments}
+              className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg flex items-center space-x-2"
+            >
+              <RefreshCw size={16} />
+              <span>Refresh</span>
             </button>
-          </div> */}
+          </div>
         </div>
       </div>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat, index) => {
-          const Icon = stat.icon;
-          return (
-            <div key={index} className="bg-white rounded-xl shadow-sm p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">{stat.label}</p>
-                  <p className="text-2xl font-bold text-gray-800 mt-1">{stat.value}</p>
-                </div>
-                <div className={`p-3 rounded-lg bg-${stat.color}-100`}>
-                  <Icon className={`text-${stat.color}-600`} size={24} />
-                </div>
+      {statsLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1,2,3,4].map((i) => (
+            <div key={i} className="bg-white rounded-xl shadow-sm p-5 animate-pulse">
+              <div className="h-12 bg-gray-200 rounded"></div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl shadow-sm p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Total Submissions</p>
+                <p className="text-2xl font-bold text-gray-800 mt-1">{stats.total_submissions}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-blue-100">
+                <FileText className="text-blue-600" size={24} />
               </div>
             </div>
-          );
-        })}
-      </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Pending Grading</p>
+                <p className="text-2xl font-bold text-gray-800 mt-1">{stats.total_pending}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-yellow-100">
+                <Clock className="text-yellow-600" size={24} />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Average Grade</p>
+                <p className="text-2xl font-bold text-gray-800 mt-1">{stats.avg_grade}%</p>
+              </div>
+              <div className="p-3 rounded-lg bg-green-100">
+                <TrendingUp className="text-green-600" size={24} />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">On Time Submissions</p>
+                <p className="text-2xl font-bold text-gray-800 mt-1">92%</p>
+              </div>
+              <div className="p-3 rounded-lg bg-purple-100">
+                <CheckCircle className="text-purple-600" size={24} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="">
         {/* Left Column - Grading Interface */}
@@ -275,301 +423,205 @@ export default function GradingContent() {
               <div className="flex flex-col md:flex-row space-y-3 md:space-y-0 md:space-x-3">
                 <div className="flex items-center space-x-2">
                   <Filter className="text-gray-500" size={20} />
-                  <select
-                    value={selectedCourse}
-                    onChange={(e) => setSelectedCourse(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg"
-                  >
-                    {courses.map((course) => (
-                      <option key={course.id} value={course.id}>
-                        {course.name} ({course.assignments})
-                      </option>
-                    ))}
-                  </select>
                 </div>
 
                 <select
                   value={selectedStatus}
-                  onChange={(e) => setSelectedStatus(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedStatus(e.target.value);
+                    setCurrentPage(1);
+                  }}
                   className="px-3 py-2 border border-gray-300 rounded-lg"
                 >
                   <option value="all">All Status</option>
-                  <option value="pending">Pending</option>
-                  <option value="graded">Graded</option>
-                  <option value="needs_review">Needs Review</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Graded">Graded</option>
+                  <option value="Resubmitted">Resubmitted</option>
                 </select>
 
                 <div className="relative">
                   <input
                     type="text"
                     placeholder="Search assignments..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                     className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-full"
                   />
                   <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
                 </div>
+                <button
+                  onClick={handleSearch}
+                  className="px-4 py-2 bg-primary-dark text-white rounded-lg"
+                >
+                  Search
+                </button>
               </div>
             </div>
 
-            {/* Assignments List */}
-            <div className="space-y-4">
-              {filteredAssignments.map((assignment) => (
-                <div key={assignment.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-3">
-                        <div className="p-2 bg-blue-100 rounded-lg">
-                          <FileText className="text-blue-600" size={20} />
-                        </div>
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <h3 className="font-bold text-gray-800">{assignment.title}</h3>
-                            {getStatusBadge(assignment.status)}
-                          </div>
-                          <div className="flex items-center space-x-4 text-sm text-gray-600 mt-1">
-                            <span>{assignment.course}</span>
-                            <span>•</span>
-                            <span>{assignment.student} ({assignment.studentId})</span>
-                            <span>•</span>
-                            <span className="flex items-center space-x-1">
-                              <Calendar size={12} />
-                              <span>{assignment.submitted}</span>
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+            {/* Error Message */}
+            {error && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center space-x-2">
+                  <AlertCircle className="text-red-500" size={20} />
+                  <span className="text-red-700">{error}</span>
+                </div>
+              </div>
+            )}
 
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                        <div className="text-center p-3 bg-gray-50 rounded-lg">
-                          <p className="text-sm text-gray-600">File Type</p>
-                          <p className="font-semibold">{assignment.fileType}</p>
-                        </div>
-                        <div className="text-center p-3 bg-gray-50 rounded-lg">
-                          <p className="text-sm text-gray-600">File Size</p>
-                          <p className="font-semibold">{assignment.fileSize}</p>
-                        </div>
-                        <div className="text-center p-3 bg-gray-50 rounded-lg">
-                          <p className="text-sm text-gray-600">Max Score</p>
-                          <p className="font-semibold">{assignment.maxScore}</p>
-                        </div>
-                        <div className="text-center p-3 bg-gray-50 rounded-lg">
-                          <p className="text-sm text-gray-600">Score</p>
-                          <p className={`font-semibold ${
-                            assignment.score === null 
-                              ? 'text-gray-600' 
-                              : assignment.score >= 90 
-                                ? 'text-green-600' 
-                                : assignment.score >= 70 
-                                  ? 'text-yellow-600' 
-                                  : 'text-red-600'
-                          }`}>
-                            {assignment.score !== null ? `${assignment.score}/${assignment.maxScore}` : 'Not Graded'}
-                          </p>
-                        </div>
-                      </div>
+            {/* Loading State */}
+            {loading ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-dark mx-auto mb-4"></div>
+                <p className="text-gray-600">Loading assignments...</p>
+              </div>
+            ) : (
+              <>
+                {/* Assignments List */}
+                <div className="space-y-4">
+                  {assignments.length === 0 ? (
+                    <div className="text-center py-8">
+                      <FileText className="mx-auto text-gray-400 mb-4" size={48} />
+                      <h3 className="text-lg font-semibold text-gray-800 mb-2">No Submissions Found</h3>
+                      <p className="text-gray-600">No assignment submissions match your criteria.</p>
+                    </div>
+                  ) : (
+                    assignments.map((assignment) => (
+                      <div key={assignment.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-3 mb-3">
+                              <div className="p-2 bg-blue-100 rounded-lg">
+                                <FileText className="text-blue-600" size={20} />
+                              </div>
+                              <div>
+                                <div className="flex items-center space-x-2">
+                                  <h3 className="font-bold text-gray-800">{assignment.title}</h3>
+                                  {getStatusBadge(assignment.status)}
+                                </div>
+                                <div className="flex items-center space-x-4 text-sm text-gray-600 mt-1">
+                                  <span>{assignment.course}</span>
+                                  <span>•</span>
+                                  <span>{assignment.student} ({assignment.studentId})</span>
+                                  <span>•</span>
+                                  <span className="flex items-center space-x-1">
+                                    <Calendar size={12} />
+                                    <span>{assignment.submitted}</span>
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
 
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => handleDownloadSubmission(assignment.id)}
-                          className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg flex items-center space-x-2"
-                        >
-                          <Download size={16} />
-                          <span>Download</span>
-                        </button>
-                        <button
-                          onClick={() => handleGradeAssignment(assignment.id)}
-                          className="px-4 py-2 bg-primary-dark hover:bg-primary-light hover:text-primary-dark text-white rounded-lg flex items-center space-x-2"
-                        >
-                          <Edit size={16} />
-                          <span>Grade Now</span>
-                        </button>
-                        <button
-                          onClick={() => handlePreview(assignment.id)}
-                          className="px-4 py-2 border border-purple-500 text-purple-600 hover:bg-purple-50 rounded-lg flex items-center space-x-2"
-                        >
-                          <Eye size={16} />
-                          <span>Preview</span>
-                        </button>
-                        <button
-                          onClick={() => handleAddFeedback(assignment.id)}
-                          className="px-4 py-2 border border-green-500 text-green-600 hover:bg-green-50 rounded-lg flex items-center space-x-2"
-                        >
-                          <MessageSquare size={16} />
-                          <span>Add Feedback</span>
-                        </button>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                              <div className="text-center p-3 bg-gray-50 rounded-lg">
+                                <p className="text-sm text-gray-600">File Type</p>
+                                <p className="font-semibold">{assignment.fileType}</p>
+                              </div>
+                              <div className="text-center p-3 bg-gray-50 rounded-lg">
+                                <p className="text-sm text-gray-600">File Size</p>
+                                <p className="font-semibold">{assignment.fileSize}</p>
+                              </div>
+                              <div className="text-center p-3 bg-gray-50 rounded-lg">
+                                <p className="text-sm text-gray-600">Max Score</p>
+                                <p className="font-semibold">{assignment.maxScore}</p>
+                              </div>
+                              <div className="text-center p-3 bg-gray-50 rounded-lg">
+                                <p className="text-sm text-gray-600">Score</p>
+                                <p className={`font-semibold ${
+                                  assignment.score === null 
+                                    ? 'text-gray-600' 
+                                    : assignment.score >= 90 
+                                      ? 'text-green-600' 
+                                      : assignment.score >= 70 
+                                        ? 'text-yellow-600' 
+                                        : 'text-red-600'
+                                }`}>
+                                  {assignment.score !== null ? `${assignment.score}/${assignment.maxScore}` : 'Not Graded'}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              {assignment.submission_src && (
+                                <button
+                                  onClick={() => handleDownloadSubmission(assignment.submission_src)}
+                                  className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg flex items-center space-x-2"
+                                >
+                                  <Download size={16} />
+                                  <span>View Submission</span>
+                                </button>
+                              )}
+                              {!assignment.score && (
+                                <button
+                                  onClick={() => handleGradeAssignment(assignment)}
+                                  className="px-4 py-2 bg-primary-dark hover:bg-primary-light text-white rounded-lg flex items-center space-x-2"
+                                >
+                                  <Edit size={16} />
+                                  <span>Grade Now</span>
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handlePreview(assignment)}
+                                className="px-4 py-2 border border-purple-500 text-purple-600 hover:bg-purple-50 rounded-lg flex items-center space-x-2"
+                              >
+                                <Eye size={16} />
+                                <span>Details</span>
+                              </button>
+                              <button
+                                onClick={() => handleAddFeedback(assignment)}
+                                className="px-4 py-2 border border-green-500 text-green-600 hover:bg-green-50 rounded-lg flex items-center space-x-2"
+                              >
+                                <MessageSquare size={16} />
+                                <span>Add Feedback</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
                       </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Pagination */}
+                {assignments.length > 0 && (
+                  <div className="flex items-center justify-between mt-6 pt-6 border-t">
+                    <div className="text-sm text-gray-600">
+                      Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} assignments
+                    </div>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage === 1}
+                        className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Previous
+                      </button>
+                      {[...Array(pagination.pages)].map((_, i) => (
+                        <button
+                          key={i + 1}
+                          onClick={() => handlePageChange(i + 1)}
+                          className={`px-4 py-2 border rounded-lg ${
+                            currentPage === i + 1
+                              ? 'bg-primary-dark text-white border-primary-dark'
+                              : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          {i + 1}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage === pagination.pages}
+                        className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Next
+                      </button>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Pagination */}
-            <div className="flex items-center justify-between mt-6 pt-6 border-t">
-              <div className="text-sm text-gray-600">
-                Showing {filteredAssignments.length} of {assignments.length} assignments
-              </div>
-              <div className="flex space-x-2">
-                <button className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg">
-                  Previous
-                </button>
-                <button className="px-4 py-2 bg-primary-dark text-white rounded-lg">
-                  1
-                </button>
-                <button className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg">
-                  2
-                </button>
-                <button className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg">
-                  Next
-                </button>
-              </div>
-            </div>
+                )}
+              </>
+            )}
           </div>
-        </div>
-
-        {/* Right Column - Grading Tools */}
-        <div className="space-y-6">
-          {/* Grading Rubric */}
-          {/* <div className="bg-white rounded-2xl shadow-sm p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-gray-800">Grading Rubric</h2>
-              <Star className="text-yellow-500" size={20} />
-            </div>
-
-            <div className="space-y-4">
-              {Object.entries(gradingRubric).map(([key, criteria]) => (
-                <div key={key} className="p-4 border border-gray-200 rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium text-gray-800">
-                      {key === 'criteria1' && 'Code Quality & Structure'}
-                      {key === 'criteria2' && 'Functionality & Features'}
-                      {key === 'criteria3' && 'Documentation & Comments'}
-                      {key === 'criteria4' && 'Design & User Experience'}
-                    </span>
-                    <span className="font-bold text-gray-800">{criteria.score}/{criteria.max}</span>
-                  </div>
-                  
-                  <div className="mb-3">
-                    <input
-                      type="range"
-                      min="0"
-                      max={criteria.max}
-                      value={criteria.score}
-                      onChange={(e) => handleUpdateRubric(key, 'score', parseInt(e.target.value))}
-                      className="w-full"
-                    />
-                  </div>
-
-                  <textarea
-                    value={criteria.comment}
-                    onChange={(e) => handleUpdateRubric(key, 'comment', e.target.value)}
-                    placeholder="Add comments for this criteria..."
-                    className="w-full p-2 border border-gray-300 rounded-lg text-sm"
-                    rows="2"
-                  />
-                </div>
-              ))}
-
-              <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-bold text-gray-800">Total Score</span>
-                  <span className="text-2xl font-bold text-green-600">
-                    {calculateTotalScore()}/100
-                  </span>
-                </div>
-                <div className="w-full bg-green-200 rounded-full h-2">
-                  <div
-                    className="bg-green-600 h-2 rounded-full"
-                    style={{ width: `${calculateTotalScore()}%` }}
-                  ></div>
-                </div>
-              </div>
-
-              <button className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg">
-                <Send size={16} className="inline mr-2" />
-                Publish Grade
-              </button>
-            </div>
-          </div> */}
-
-          {/* Quick Actions */}
-          {/* <div className="bg-white rounded-2xl shadow-sm p-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">Quick Actions</h2>
-            <div className="space-y-3">
-              <button 
-                onClick={() => alert('Downloading all submissions...')}
-                className="w-full p-4 border border-blue-500 text-blue-600 hover:bg-blue-50 rounded-lg text-left"
-              >
-                <div className="flex items-center space-x-3">
-                  <Download size={20} />
-                  <div>
-                    <p className="font-medium">Download All Submissions</p>
-                    <p className="text-sm text-gray-600">Batch download pending work</p>
-                  </div>
-                </div>
-              </button>
-              
-              <button 
-                onClick={() => alert('Opening template upload...')}
-                className="w-full p-4 border border-green-500 text-green-600 hover:bg-green-50 rounded-lg text-left"
-              >
-                <div className="flex items-center space-x-3">
-                  <Upload size={20} />
-                  <div>
-                    <p className="font-medium">Upload Grading Template</p>
-                    <p className="text-sm text-gray-600">Import scores from CSV</p>
-                  </div>
-                </div>
-              </button>
-              
-              <button 
-                onClick={() => alert('Opening grade distribution...')}
-                className="w-full p-4 border border-purple-500 text-purple-600 hover:bg-purple-50 rounded-lg text-left"
-              >
-                <div className="flex items-center space-x-3">
-                  <Award size={20} />
-                  <div>
-                    <p className="font-medium">View Grade Distribution</p>
-                    <p className="text-sm text-gray-600">Analytics & statistics</p>
-                  </div>
-                </div>
-              </button>
-            </div>
-          </div> */}
-
-          {/* Recent Grades */}
-          {/* <div className="bg-white rounded-2xl shadow-sm p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-800">Recently Graded</h2>
-              <Clock className="text-gray-500" size={20} />
-            </div>
-
-            <div className="space-y-3">
-              {assignments
-                .filter(a => a.status === 'graded')
-                .slice(0, 3)
-                .map((assignment) => (
-                  <div key={assignment.id} className="p-3 border border-gray-200 rounded-lg">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium text-gray-800 truncate">{assignment.title}</span>
-                      <span className={`font-bold ${
-                        assignment.score >= 90 ? 'text-green-600' :
-                        assignment.score >= 70 ? 'text-yellow-600' : 'text-red-600'
-                      }`}>
-                        {assignment.score}%
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-600 truncate">{assignment.student}</p>
-                  </div>
-                ))}
-            </div>
-
-            <Link 
-              href="/teacher/analytics"
-              className="w-full mt-4 text-center text-blue-600 hover:text-blue-800 font-medium text-sm"
-            >
-              View All Grades →
-            </Link>
-          </div> */}
         </div>
       </div>
 
@@ -578,7 +630,9 @@ export default function GradingContent() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-800">Grade Assignment</h3>
+              <h3 className="text-xl font-bold text-gray-800">
+                {selectedAssignment.score ? 'Update Grade' : 'Grade Assignment'}
+              </h3>
               <button
                 onClick={handleCloseGradeModal}
                 className="p-2 hover:bg-gray-100 rounded-lg"
@@ -599,21 +653,88 @@ export default function GradingContent() {
               </div>
               
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Assignment Score (out of {selectedAssignment.maxScore})
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max={selectedAssignment.maxScore}
-                    value={gradeValue}
-                    onChange={(e) => setGradeValue(e.target.value)}
-                    className="w-full p-3 border border-gray-300 rounded-lg"
-                    placeholder="Enter score"
-                  />
+                {/* Grading Criteria */}
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <h5 className="font-medium text-gray-700 mb-3">Grading Criteria</h5>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Code Quality (0-25)</label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="25"
+                        value={gradingData.code_quality}
+                        onChange={(e) => handleUpdateGradingCriteria('code_quality', e.target.value)}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>0</span>
+                        <span className="font-medium text-primary-dark">{gradingData.code_quality}/25</span>
+                        <span>25</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Documentation (0-25)</label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="25"
+                        value={gradingData.documentation}
+                        onChange={(e) => handleUpdateGradingCriteria('documentation', e.target.value)}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>0</span>
+                        <span className="font-medium text-primary-dark">{gradingData.documentation}/25</span>
+                        <span>25</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Functionality (0-25)</label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="25"
+                        value={gradingData.functionality}
+                        onChange={(e) => handleUpdateGradingCriteria('functionality', e.target.value)}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>0</span>
+                        <span className="font-medium text-primary-dark">{gradingData.functionality}/25</span>
+                        <span>25</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Creativity (0-25)</label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="25"
+                        value={gradingData.creativity}
+                        onChange={(e) => handleUpdateGradingCriteria('creativity', e.target.value)}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>0</span>
+                        <span className="font-medium text-primary-dark">{gradingData.creativity}/25</span>
+                        <span>25</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                
+
+                <div className="p-3 bg-green-50 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-green-800">Final Grade</span>
+                    <span className="text-2xl font-bold text-green-600">{gradingData.final_grade}/100</span>
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Additional Comments
@@ -622,6 +743,8 @@ export default function GradingContent() {
                     className="w-full p-3 border border-gray-300 rounded-lg"
                     rows="3"
                     placeholder="Add any additional comments or notes..."
+                    value={feedbackText}
+                    onChange={(e) => setFeedbackText(e.target.value)}
                   />
                 </div>
               </div>
@@ -636,9 +759,20 @@ export default function GradingContent() {
               </button>
               <button
                 onClick={handleSubmitGrade}
-                className="px-4 py-2 bg-primary-dark hover:bg-primary-light hover:text-primary-dark text-white rounded-lg"
+                disabled={submittingGrade}
+                className="px-4 py-2 bg-primary-dark hover:bg-primary-light text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
               >
-                Submit Grade
+                {submittingGrade ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span>Submitting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send size={16} />
+                    <span>Submit Grade</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -650,7 +784,7 @@ export default function GradingContent() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-800">Preview Assignment</h3>
+              <h3 className="text-xl font-bold text-gray-800">Assignment Details</h3>
               <button
                 onClick={handleClosePreviewModal}
                 className="p-2 hover:bg-gray-100 rounded-lg"
@@ -693,8 +827,8 @@ export default function GradingContent() {
               
               <div className="space-y-4">
                 <div>
-                  <h5 className="font-bold text-gray-800 mb-2">Assignment Description</h5>
-                  <p className="text-gray-600">{selectedAssignment.description}</p>
+                  <h5 className="font-bold text-gray-800 mb-2">Student Comment</h5>
+                  <p className="text-gray-600">{selectedAssignment.description || 'No comment provided'}</p>
                 </div>
                 
                 <div>
@@ -705,35 +839,72 @@ export default function GradingContent() {
                       <p className="font-semibold">{selectedAssignment.fileType}</p>
                     </div>
                     <div className="p-3 border border-gray-200 rounded-lg">
-                      <p className="text-sm text-gray-600">File Size</p>
-                      <p className="font-semibold">{selectedAssignment.fileSize}</p>
+                      <p className="text-sm text-gray-600">Submission Link</p>
+                      {selectedAssignment.submission_src ? (
+                        <a 
+                          href={selectedAssignment.submission_src} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-primary-dark hover:underline font-semibold text-sm"
+                        >
+                          View Submission
+                        </a>
+                      ) : (
+                        <p className="font-semibold text-gray-500">No link available</p>
+                      )}
                     </div>
                   </div>
                 </div>
                 
                 <div>
-                  <h5 className="font-bold text-gray-800 mb-2">Preview Content</h5>
+                  <h5 className="font-bold text-gray-800 mb-2">Grade Information</h5>
                   <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                    <div className="flex items-center justify-center h-48">
-                      <div className="text-center">
-                        <FileText className="mx-auto text-gray-400 mb-3" size={48} />
-                        <p className="text-gray-600">Assignment content preview would appear here</p>
-                        <p className="text-sm text-gray-500 mt-2">
-                          For {selectedAssignment.fileType} files, you can view the content inline or download to preview
-                        </p>
+                    {selectedAssignment.score ? (
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-lg font-bold text-gray-800">Current Grade</p>
+                          <p className="text-sm text-gray-600">Graded assignment</p>
+                        </div>
+                        <div className="text-3xl font-bold text-green-600">
+                          {selectedAssignment.score}%
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="text-center">
+                        <p className="text-gray-600">Not yet graded</p>
+                        <button
+                          onClick={() => {
+                            handleClosePreviewModal();
+                            handleGradeAssignment(selectedAssignment);
+                          }}
+                          className="mt-2 px-4 py-2 bg-primary-dark text-white rounded-lg"
+                        >
+                          Grade Now
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex justify-end space-x-3">
+              {selectedAssignment.submission_src && (
+                <a
+                  href={selectedAssignment.submission_src}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-6 py-3 border border-primary-dark text-primary-dark hover:bg-primary-lighter rounded-lg flex items-center space-x-2"
+                >
+                  <Download size={16} />
+                  <span>Open Submission</span>
+                </a>
+              )}
               <button
                 onClick={handleClosePreviewModal}
-                className="px-6 py-3 bg-primary-dark hover:bg-primary-light hover:text-primary-dark text-white rounded-lg"
+                className="px-6 py-3 bg-primary-dark hover:bg-primary-light text-white rounded-lg"
               >
-                Close Preview
+                Close
               </button>
             </div>
           </div>
@@ -774,7 +945,7 @@ export default function GradingContent() {
                     value={feedbackText}
                     onChange={(e) => setFeedbackText(e.target.value)}
                     className="w-full p-3 border border-gray-300 rounded-lg"
-                    rows="4"
+                    rows="6"
                     placeholder="Provide constructive feedback for the student..."
                   />
                 </div>

@@ -44,7 +44,7 @@ const Toast = ({ message, type = 'success', onClose }) => {
              : 'ℹ';
 
   return (
-    <div className={`fixed top-4 right-4 z-50 p-4 border rounded-lg shadow-lg ${bgColor} flex items-center space-x-2 animate-slide-in`}>
+    <div className={`fixed top-4 right-4 z-50 p-4 border rounded-lg shadow-lg ${bgColor} flex items-center space-x-2 uppercase animate-slide-in`}>
       <span className="font-bold">{icon}</span>
       <span>{message}</span>
     </div>
@@ -484,7 +484,7 @@ export default function LectureMaterialsTab({ selectedCourse, searchQuery, cours
       {error && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
           <div className="flex items-center space-x-2">
-            <AlertCircle className="text-red-500" size={20} />
+            <AlertCircle className="text-red-500 text-center" size={20} />
             <span className="text-red-700">{error}</span>
           </div>
         </div>
