@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 import LectureMaterialsTab from '@/components/teacher/lecture-management/LectureMaterialsTab';
 import LiveSessionsTab from '@/components/teacher/lecture-management/LiveSessionsTab';
 import RecordingsTab from '@/components/teacher/lecture-management/RecordingsTab';
+import AssignmentsTab from '@/components/teacher/lecture-management/AssignmentsTab';
 import ScheduleModal from '@/components/teacher/modals/ScheduleModal';
 import { 
   Calendar,
@@ -82,6 +83,16 @@ export default function LectureManagementContent() {
             >
               Recordings
             </button>
+            <button
+              onClick={() => setActiveTab('assignments')}
+              className={`px-4 py-2 font-medium rounded-lg transition-colors ${
+                activeTab === 'assignments'
+                  ? 'bg-white text-primary-dark shadow-sm'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              Assignments
+            </button>
           </div>
 
           <div className="flex flex-col md:flex-row gap-3">
@@ -118,6 +129,14 @@ export default function LectureManagementContent() {
 
         {activeTab === 'recordings' && (
           <RecordingsTab
+            selectedCourse={selectedCourse}
+            searchQuery={searchQuery}
+            courses={courses}
+          />
+        )}
+
+        {activeTab === 'assignments' && (
+          <AssignmentsTab
             selectedCourse={selectedCourse}
             searchQuery={searchQuery}
             courses={courses}
